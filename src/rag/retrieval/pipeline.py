@@ -2,7 +2,7 @@ import time
 from typing import Any
 
 from rag.config import get_settings
-from rag.indexing.opensearch_client import OpenSearchClient
+from rag.indexing.factory import get_search_backend
 from rag.models.schemas import Citation, SearchMode
 from rag.observability.logging import get_logger
 from rag.observability.metrics import RETRIEVAL_LATENCY
@@ -20,14 +20,19 @@ logger = get_logger(__name__)
 class RetrievalPipeline:
     def __init__(
         self,
-        opensearch: OpenSearchClient | None = None,
+        backend: str | None = None,
         embedding_cache: QueryEmbeddingCache | None = None,
     ) -> None:
-        self.opensearch = opensearch or OpenSearchClient()
+        self._backend_name = backend
+        self.search_backend = get_search_backend(backend)
         self.embedding_service = get_embedding_service()
         self.reranker_service = get_reranker_service()
         self.embedding_cache = embedding_cache or get_embedding_cache()
         self.config = get_settings().yaml_config.get("retrieval", {})
+
+    @property
+    def backend_name(self) -> str:
+        return self._backend_name or self.search_backend.name
 
     async def retrieve(
         self,
@@ -43,7 +48,6 @@ class RetrievalPipeline:
         rerank_top_n = top_k or self.config.get("rerank_top_n", 5)
         rerank_input_k = self.config.get("rerank_input_k", 50)
 
-        # Embedding
         t0 = time.perf_counter()
         embedding = await self._get_query_embedding(query)
         latency["embedding_ms"] = (time.perf_counter() - t0) * 1000
@@ -54,7 +58,9 @@ class RetrievalPipeline:
 
         if mode in (SearchMode.DENSE, SearchMode.HYBRID):
             t0 = time.perf_counter()
-            dense_hits = await self.opensearch.knn_search(embedding, k=dense_k, tenant_id=tenant_id)
+            dense_hits = await self.search_backend.knn_search(
+                embedding, k=dense_k, tenant_id=tenant_id
+            )
             latency["dense_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="dense").observe(latency["dense_ms"] / 1000)
 
@@ -63,7 +69,9 @@ class RetrievalPipeline:
 
         if mode in (SearchMode.SPARSE, SearchMode.HYBRID):
             t0 = time.perf_counter()
-            sparse_hits = await self.opensearch.bm25_search(query, k=sparse_k, tenant_id=tenant_id)
+            sparse_hits = await self.search_backend.bm25_search(
+                query, k=sparse_k, tenant_id=tenant_id
+            )
             latency["sparse_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="sparse").observe(latency["sparse_ms"] / 1000)
 
@@ -117,3 +125,6 @@ class RetrievalPipeline:
                 )
             )
         return citations
+
+    async def close(self) -> None:
+        await self.search_backend.close()

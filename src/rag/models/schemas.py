@@ -20,6 +20,11 @@ class SearchMode(StrEnum):
     SPARSE = "sparse"
 
 
+class SearchBackendType(StrEnum):
+    OPENSEARCH = "opensearch"
+    PGVECTOR = "pgvector"
+
+
 class DocumentUploadResponse(BaseModel):
     doc_id: UUID
     job_id: UUID
@@ -42,6 +47,7 @@ class DocumentResponse(BaseModel):
 class RetrieveRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=4096)
     mode: SearchMode = SearchMode.HYBRID
+    backend: SearchBackendType | None = None
     tenant_id: str | None = None
     top_k: int | None = Field(default=None, ge=1, le=100)
     rerank: bool = True
@@ -61,12 +67,14 @@ class Citation(BaseModel):
 class RetrieveResponse(BaseModel):
     query: str
     mode: SearchMode
+    backend: str
     citations: list[Citation]
     latency_ms: dict[str, float]
 
 
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=4096)
+    backend: SearchBackendType | None = None
     tenant_id: str | None = None
     top_k: int | None = Field(default=None, ge=1, le=20)
     include_citations: bool = True
@@ -75,6 +83,7 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     query: str
     answer: str
+    backend: str
     citations: list[Citation]
     latency_ms: dict[str, float]
 

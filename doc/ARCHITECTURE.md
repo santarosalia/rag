@@ -135,3 +135,18 @@ src/rag/
 | LLM provider 교체 | `LLM_BASE_URL` + `LLM_API_KEY` |
 | Tenant 격리 | `tenant_id` filter (현재) → index-per-tenant (Phase 2) |
 | Dense 전용 스토어 | Qdrant 분리 + RRF 유지 (Phase 3) |
+| 검색 백엔드 교체 | `SearchBackend` 구현 + `factory.py` 등록 |
+
+## SearchBackend 플러그인 (Dual Backend)
+
+```
+SearchBackend (Protocol) — indexing/base.py
+├── OpenSearchBackend   — indexing/opensearch_client.py  (BM25+Nori, kNN)
+└── PgVectorBackend     — indexing/pgvector_backend.py (FTS+Kiwi, pgvector)
+
+Morphology: indexing/morphology.py (Kiwi, pgvector sparse용)
+Factory:    indexing/factory.py → get_search_backend(name)
+```
+
+전환: `SEARCH_BACKEND=opensearch|pgvector`, API `"backend"` 필드.  
+상세: [SEARCH_BACKENDS.md](SEARCH_BACKENDS.md)

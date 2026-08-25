@@ -14,6 +14,12 @@ def main() -> None:
     parser.add_argument("--api-url", default="http://localhost:8000")
     parser.add_argument("--api-key", default="dev-api-key-change-me")
     parser.add_argument("--mode", default="hybrid", choices=["hybrid", "dense", "sparse"])
+    parser.add_argument(
+        "--backend",
+        default=None,
+        choices=["opensearch", "pgvector"],
+        help="Search backend override (default: server SEARCH_BACKEND)",
+    )
     parser.add_argument("--iterations", type=int, default=10)
     args = parser.parse_args()
 
@@ -22,18 +28,24 @@ def main() -> None:
 
     latencies: list[float] = []
     for i in range(args.iterations):
+        payload: dict = {"query": args.query, "mode": args.mode, "rerank": True}
+        if args.backend:
+            payload["backend"] = args.backend
+
         t0 = time.perf_counter()
-        response = client.post(
-            "/v1/retrieve",
-            json={"query": args.query, "mode": args.mode, "rerank": True},
-        )
+        response = client.post("/v1/retrieve", json=payload)
         response.raise_for_status()
         elapsed = (time.perf_counter() - t0) * 1000
         latencies.append(elapsed)
         result = response.json()
-        print(f"Run {i + 1}: {elapsed:.1f}ms, citations={len(result['citations'])}")
+        backend_used = result.get("backend", "unknown")
+        print(
+            f"Run {i + 1}: {elapsed:.1f}ms, backend={backend_used}, "
+            f"citations={len(result['citations'])}"
+        )
 
-    print(f"\nMode: {args.mode}")
+    print(f"\nBackend: {args.backend or 'server default'}")
+    print(f"Mode: {args.mode}")
     print(f"Mean: {statistics.mean(latencies):.1f}ms")
     print(f"P50:  {statistics.median(latencies):.1f}ms")
     if len(latencies) >= 2:

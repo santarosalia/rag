@@ -86,17 +86,17 @@ def ingest_document_task(self, doc_id: str, job_id: str) -> dict:
 
 @celery_app.task(bind=True, name="rag.delete_document", max_retries=3)
 def delete_document_task(self, doc_id: str) -> dict:
-    from rag.indexing.opensearch_client import OpenSearchClient
+    from rag.indexing.factory import get_search_backend
     from rag.storage.s3 import ObjectStorage
 
     async def _delete():
-        opensearch = OpenSearchClient()
+        backend = get_search_backend()
         try:
-            deleted = await opensearch.delete_by_doc_id(doc_id)
-            await opensearch.close()
+            deleted = await backend.delete_by_doc_id(doc_id)
+            await backend.close()
             return deleted
         except Exception:
-            await opensearch.close()
+            await backend.close()
             raise
 
     session = get_sync_session()

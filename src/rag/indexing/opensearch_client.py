@@ -14,7 +14,7 @@ from rag.observability.metrics import OPENSEARCH_ERRORS
 logger = get_logger(__name__)
 
 
-class OpenSearchClient:
+class OpenSearchBackend:
     def __init__(self) -> None:
         settings = get_settings()
         config = settings.yaml_config.get("opensearch", {})
@@ -33,6 +33,10 @@ class OpenSearchClient:
             verify_certs=False,
             ssl_show_warn=False,
         )
+
+    @property
+    def name(self) -> str:
+        return "opensearch"
 
     async def close(self) -> None:
         await self.client.close()
@@ -191,6 +195,10 @@ class OpenSearchClient:
                 }
             )
         return hits
+
+
+# Backward-compatible alias
+OpenSearchClient = OpenSearchBackend
 
 
 def build_index_document(

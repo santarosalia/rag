@@ -2,7 +2,7 @@
 
 **Dense + Sparse 하이브리드 검색**, **Cross-encoder Rerank**, **출처 기반 LLM 답변**을 제공하는 프로덕션급 RAG(Retrieval-Augmented Generation) 플랫폼입니다.
 
-한국어/영어 혼합 문서를 대상으로 OpenSearch 기반 하이브리드 인덱싱, Celery 비동기 인제스트, Kubernetes 배포를 지원합니다.
+한국어/영어 혼합 문서를 대상으로 **OpenSearch** 또는 **PostgreSQL pgvector+FTS(Kiwi)** 검색 백엔드를 선택할 수 있으며, Celery 비동기 인제스트, Kubernetes 배포를 지원합니다.
 
 ---
 
@@ -10,7 +10,8 @@
 
 | 기능 | 설명 |
 |------|------|
-| **Hybrid Search** | Dense kNN(BGE-M3) + BM25 Sparse(Nori) → RRF 융합 |
+| **Hybrid Search** | Dense kNN(BGE-M3) + Sparse(BM25/Nori 또는 FTS+Kiwi) → RRF 융합 |
+| **Dual Search Backend** | `opensearch` ↔ `pgvector` 환경/API 스위치로 A/B 테스트 |
 | **Rerank** | Cross-encoder `bge-reranker-v2-m3`로 top-50 → top-5 정밀 재정렬 |
 | **Citation** | 모든 답변에 chunk_id, source, page, snippet 포함 |
 | **Async Ingest** | PDF / Markdown / HTML / TXT 비동기 인덱싱 (Celery) |
@@ -33,7 +34,7 @@ Query → Dense kNN + BM25 Sparse → RRF Fusion → Cross-encoder Rerank → LL
 |-----------|------------|
 | API | FastAPI + Uvicorn |
 | Queue | Celery + Redis |
-| Vector + Sparse | OpenSearch 2.x (kNN + BM25, Nori) |
+| Vector + Sparse | OpenSearch 2.x **또는** PG pgvector + FTS (Kiwi) |
 | Metadata | PostgreSQL 16 |
 | Object Storage | MinIO (dev) / S3 (prod) |
 | Embedding | BAAI/bge-m3 (1024-dim) |
@@ -41,7 +42,34 @@ Query → Dense kNN + BM25 Sparse → RRF Fusion → Cross-encoder Rerank → LL
 | LLM | OpenAI-compatible API |
 
 > 상세 기획: [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md)  
-> 아키텍처 상세: [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md)
+> 아키텍처 상세: [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md)  
+> **검색 백엔드 전환:** [`doc/SEARCH_BACKENDS.md`](doc/SEARCH_BACKENDS.md)
+
+---
+
+## 검색 백엔드 선택
+
+| Backend | Dense | Sparse | 적합한 경우 |
+|---------|-------|--------|-------------|
+| `opensearch` (기본) | kNN HNSW | BM25 + Nori | 대규모, Nori 한국어 품질 |
+| `pgvector` | pgvector HNSW | FTS + Kiwi | PG 통합 운영, 인프라 단순화 |
+
+```bash
+# .env 기본값 변경
+SEARCH_BACKEND=pgvector
+
+# 또는 API 요청마다 지정 (A/B 테스트)
+curl -X POST http://localhost:8000/v1/retrieve \
+  -H "X-API-Key: dev-api-key-change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "질의", "backend": "pgvector"}'
+
+# 벤치마크 비교
+python scripts/benchmark_retrieval.py "질의" --backend opensearch --iterations 10
+python scripts/benchmark_retrieval.py "질의" --backend pgvector --iterations 10
+```
+
+백엔드 전환 후 **문서 re-ingest** 필요. 상세: [`doc/SEARCH_BACKENDS.md`](doc/SEARCH_BACKENDS.md)
 
 ---
 
@@ -211,6 +239,7 @@ retrieval:
 | `LLM_BASE_URL` | LLM API URL | `https://api.openai.com/v1` |
 | `EMBEDDING_MODEL` | Embedding 모델 | `BAAI/bge-m3` |
 | `RERANKER_MODEL` | Reranker 모델 | `BAAI/bge-reranker-v2-m3` |
+| `SEARCH_BACKEND` | 검색 백엔드 | `opensearch` / `pgvector` |
 | `OPENSEARCH_URL` | OpenSearch URL | `http://opensearch:9200` |
 | `DATABASE_URL` | PostgreSQL URL | `postgresql+asyncpg://rag:rag@postgres:5432/rag` |
 
@@ -282,7 +311,8 @@ kubectl apply -f deploy/k8s/rag.yaml
 rag/
 ├── doc/
 │   ├── RAG_PLANNING.md    # RAG 시스템 기획서
-│   └── ARCHITECTURE.md    # 아키텍처 상세
+│   ├── ARCHITECTURE.md    # 아키텍처 상세
+│   └── SEARCH_BACKENDS.md # OpenSearch ↔ pgvector 전환 가이드
 ├── configs/
 │   ├── default.yaml       # 하이퍼파라미터
 │   └── opensearch/        # index template
