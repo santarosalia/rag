@@ -1,0 +1,50 @@
+chunking:
+  max_tokens: 768
+  overlap_tokens: 128
+  min_chunk_tokens: 64
+
+retrieval:
+  dense_k: 50
+  sparse_k: 50
+  rrf_k: 60
+  rerank_top_n: 5
+  rerank_input_k: 50
+  context_max_tokens: 4096
+
+models:
+  embedding: "BAAI/bge-m3"
+  reranker: "BAAI/bge-reranker-v2-m3"
+  embedding_dimension: 1024
+  reranker_batch_size: 16
+  device: "cpu"
+
+llm:
+  provider: "openai"
+  model: "gpt-4o-mini"
+  temperature: 0.1
+  max_tokens: 1024
+  system_prompt: |
+    You are a helpful assistant that answers questions based on the provided context.
+    Always cite sources using [1], [2], etc. matching the context numbering.
+    If the context does not contain enough information, say so clearly.
+    Answer in the same language as the question.
+
+opensearch:
+  index_alias: "rag-chunks"
+  index_prefix: "rag-chunks-v"
+  number_of_shards: 1
+  number_of_replicas: 0
+  knn:
+    ef_search: 100
+    m: 16
+    ef_construction: 128
+
+cache:
+  query_embedding_ttl_seconds: 3600
+
+ingestion:
+  bulk_batch_size: 100
+  max_retries: 3
+
+rate_limit:
+  requests_per_minute: 60
