@@ -3,7 +3,7 @@
 > **프로젝트명:** Hybrid RAG Platform  
 > **버전:** 0.1.0  
 > **최종 수정:** 2026-08-25  
-> **상태:** Phase 1 구현 완료
+> **상태:** Phase 1 구현 완료 + Dual Search Backend (OpenSearch / pgvector)
 
 ---
 
@@ -22,7 +22,8 @@
 | **답변 신뢰도** | 출처(citation) 포함 답변 | 모든 `/v1/query` 응답에 citations[] 포함 |
 | **확장성** | 대량 문서 비동기 처리 | Celery worker horizontal scale-out |
 | **운영성** | 관측·배포·복구 가능 | Prometheus metrics, K8s manifests, reindex runbook |
-| **다국어** | 한국어/영어 혼합 문서 | Nori analyzer + BGE-M3 multilingual embedding |
+| **다국어** | 한국어/영어 혼합 문서 | Nori(OpenSearch) / Kiwi(pgvector) + BGE-M3 |
+| **백엔드 비교** | OpenSearch vs PG pgvector A/B | `SEARCH_BACKEND` / API `backend` 파라미터 |
 
 ### 1.3 비목표 (Out of Scope — Phase 1)
 
@@ -87,6 +88,18 @@ Dense(Qdrant) + Sparse(Elasticsearch) 분리 대비:
 - **한국어 BM25** — Nori analyzer 내장
 
 벡터 QPS > 500/s 또는 billion-scale이 필요해지면 Phase 3에서 Qdrant 분리를 검토한다.
+
+### 2.4 Dual Search Backend (Phase 1.5 — 구현 완료)
+
+동일 RAG 파이프라인(RRF, Rerank, LLM) 위에 검색/인덱스 레이어만 플러그인으로 교체한다.
+
+| Backend | Dense | Sparse | 저장 |
+|---------|-------|--------|------|
+| `opensearch` | kNN HNSW | BM25 + Nori | OpenSearch |
+| `pgvector` | pgvector HNSW | FTS + Kiwi (`kiwipiepy`) | PostgreSQL `chunks` |
+
+전환 방법: `SEARCH_BACKEND` env, API `backend` 필드, `benchmark_retrieval.py --backend`.  
+상세: [`SEARCH_BACKENDS.md`](SEARCH_BACKENDS.md)
 
 ---
 
@@ -421,6 +434,5 @@ CI에서 Recall@5, MRR threshold gate.
 ## 12. 관련 문서
 
 - [README](../README.md) — Quick Start, API 레퍼런스
-- [configs/default.yaml](../configs/default.yaml) — 하이퍼파라미터
-- [deploy/k8s/rag.yaml](../deploy/k8s/rag.yaml) — K8s manifests
-- [.env.example](../.env.example) — 환경 변수
+- [SEARCH_BACKENDS.md](SEARCH_BACKENDS.md) — OpenSearch ↔ pgvector 전환
+- [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램

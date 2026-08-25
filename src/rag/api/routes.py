@@ -121,8 +121,9 @@ async def delete_document(
 
 @router.post("/retrieve", response_model=RetrieveResponse)
 async def retrieve(request: RetrieveRequest) -> RetrieveResponse:
+    backend = request.backend.value if request.backend else None
     try:
-        pipeline = RetrievalPipeline()
+        pipeline = RetrievalPipeline(backend=backend)
         citations, latency = await pipeline.retrieve(
             query=request.query,
             mode=request.mode,
@@ -134,6 +135,7 @@ async def retrieve(request: RetrieveRequest) -> RetrieveResponse:
         return RetrieveResponse(
             query=request.query,
             mode=request.mode,
+            backend=pipeline.backend_name,
             citations=citations,
             latency_ms=latency,
         )
@@ -144,8 +146,9 @@ async def retrieve(request: RetrieveRequest) -> RetrieveResponse:
 
 @router.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest) -> QueryResponse:
+    backend = request.backend.value if request.backend else None
     try:
-        service = QueryService()
+        service = QueryService(backend=backend)
         response = await service.query(
             query=request.query,
             tenant_id=request.tenant_id,

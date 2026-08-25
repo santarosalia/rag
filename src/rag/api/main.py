@@ -12,7 +12,7 @@ from rag.api.middleware import APIKeyMiddleware, RateLimitMiddleware
 from rag.api.routes import router
 from rag.config import get_settings
 from rag.db.session import engine
-from rag.indexing.opensearch_client import OpenSearchClient
+from rag.indexing.factory import get_search_backend
 from rag.models.schemas import HealthResponse, ReadyResponse
 from rag.observability.logging import get_logger, setup_logging
 from rag.observability.tracing import setup_tracing
@@ -25,15 +25,20 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(settings.log_level)
     setup_tracing("rag-api")
-    logger.info("starting_rag_api", version=__version__, env=settings.app_env)
+    logger.info(
+        "starting_rag_api",
+        version=__version__,
+        env=settings.app_env,
+        search_backend=settings.search_backend,
+    )
 
-    opensearch = OpenSearchClient()
+    search_backend = get_search_backend()
     try:
-        await opensearch.ensure_index()
+        await search_backend.ensure_index()
     except Exception as e:
-        logger.warning("opensearch_init_deferred", error=str(e))
+        logger.warning("search_backend_init_deferred", backend=search_backend.name, error=str(e))
     finally:
-        await opensearch.close()
+        await search_backend.close()
 
     yield
     await engine.dispose()
@@ -83,14 +88,16 @@ def create_app() -> FastAPI:
             checks["redis"] = f"error: {e}"
 
         try:
-            opensearch = OpenSearchClient()
-            ok = await opensearch.ping()
-            await opensearch.close()
-            checks["opensearch"] = "ok" if ok else "error: ping failed"
+            search_backend = get_search_backend()
+            ok = await search_backend.ping()
+            await search_backend.close()
+            key = f"search_{search_backend.name}"
+            checks[key] = "ok" if ok else "error: ping failed"
         except Exception as e:
-            checks["opensearch"] = f"error: {e}"
+            checks[f"search_{settings.search_backend}"] = f"error: {e}"
 
-        all_ok = all(v == "ok" for v in checks.values())
+        required = {"postgres", "redis", f"search_{settings.search_backend}"}
+        all_ok = all(checks.get(k) == "ok" for k in required)
         return ReadyResponse(
             status="ready" if all_ok else "not_ready",
             checks=checks,

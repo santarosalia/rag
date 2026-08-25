@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag.config import get_settings
 from rag.db.models import Chunk, Document, DocumentStatus, IngestJob, JobStatus
-from rag.indexing.opensearch_client import OpenSearchClient, build_index_document
+from rag.indexing.factory import get_search_backend
+from rag.indexing.opensearch_client import build_index_document
 from rag.ingestion.chunker import SemanticChunker
 from rag.ingestion.parsers import get_parser
 from rag.observability.logging import get_logger
@@ -32,7 +33,7 @@ class IngestionPipeline:
         self.batch_size = ingest_cfg.get("bulk_batch_size", 100)
         self.storage = ObjectStorage()
         self.embedding_service = get_embedding_service()
-        self.opensearch = OpenSearchClient()
+        self.search_backend = get_search_backend()
 
     async def ingest_document(
         self,
@@ -104,11 +105,12 @@ class IngestionPipeline:
                 )
 
             session.add_all(db_chunks)
-            await self.opensearch.ensure_index()
+            await session.flush()
+            await self.search_backend.ensure_index()
 
             for i in range(0, len(index_docs), self.batch_size):
                 batch = index_docs[i : i + self.batch_size]
-                success, errors = await self.opensearch.bulk_index(batch)
+                success, errors = await self.search_backend.bulk_index(batch)
                 if errors:
                     raise RuntimeError(f"Failed to index {errors} chunks")
 

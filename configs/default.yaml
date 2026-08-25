@@ -48,3 +48,6 @@ ingestion:
 
 rate_limit:
   requests_per_minute: 60
+
+search:
+  backend: opensearch  # opensearch | pgvector

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     embedding_device: str = "cpu"
+    search_backend: str = "opensearch"
 
     config_path: Path = Field(default=Path("configs/default.yaml"))
 
