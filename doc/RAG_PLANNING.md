@@ -427,3 +427,4 @@ CI에서 Recall@5, MRR threshold gate.
 
 - [README](../README.md) — Quick Start, API 레퍼런스
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
+- [adr/](adr/) — Architecture Decision Records

@@ -1,6 +1,6 @@
 # RAG 아키텍처 상세
 
-> [RAG 기획서](./RAG_PLANNING.md)의 아키텍처 보충 문서
+> [RAG 기획서](./RAG_PLANNING.md) · [ADR](./adr/)
 
 ## 컴포넌트 다이어그램
 
