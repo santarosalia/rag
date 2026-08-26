@@ -149,6 +149,35 @@ src/rag/
 └── config.py
 ```
 
+## Ingest / RAG 분리
+
+Ingest를 별도 프로젝트로 운영할 때 (pgvector 단일 DB):
+
+```mermaid
+flowchart LR
+  subgraph ingest_svc [Ingest Service]
+    Upload[Upload / Parse / Chunk]
+    IndexWrite[Embed + Kiwi morph → PG]
+  end
+
+  subgraph rag_svc [RAG Service - this repo]
+    Retrieve[POST /v1/retrieve]
+    Query[POST /v1/query]
+  end
+
+  PG[(PostgreSQL documents + chunks)]
+
+  Upload --> IndexWrite --> PG
+  Retrieve --> PG
+  Query --> Retrieve
+```
+
+- ingest: `documents` INSERT + `chunks` INSERT + `embedding`/`content_morph`/`tsv` UPDATE
+- RAG: `chunks` JOIN `documents`로 dense/sparse 검색 및 citation (`source`, `filename`, `page`)
+- **공유 PostgreSQL 필수** — 별도 검색 엔진 없음 (ADR-0002)
+
+계약·체크리스트: [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md)
+
 ## 확장 포인트
 
 | 확장 | 방법 |

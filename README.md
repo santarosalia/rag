@@ -12,7 +12,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 |------|------|
 | **Hybrid Search** | pgvector kNN(BGE-M3) + PostgreSQL FTS(Kiwi) → RRF 융합 |
 | **Rerank** | Cross-encoder `bge-reranker-v2-m3` (top-50 → top-5) |
-| **Citation** | chunk_id, source, page, snippet 포함 |
+| **Citation** | chunk_id, filename, page, snippet 포함 |
 | **Async Ingest** | PDF / MD / HTML / TXT (Celery) |
 | **Single DB** | 메타데이터 + 벡터 + FTS 모두 PostgreSQL |
 | **Observability** | Prometheus, structlog, OpenTelemetry |
@@ -37,7 +37,7 @@ Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citatio
 | Reranker | BAAI/bge-reranker-v2-m3 |
 | LLM | OpenAI-compatible API |
 
-> [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/adr/`](doc/adr/)
+> [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/adr/`](doc/adr/) · [`doc/INGEST_BOUNDARY.md`](doc/INGEST_BOUNDARY.md)
 
 ---
 

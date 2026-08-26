@@ -30,7 +30,6 @@ class DocumentUploadResponse(BaseModel):
 class DocumentResponse(BaseModel):
     doc_id: UUID
     filename: str
-    source: str
     content_type: str
     status: DocumentStatus
     chunk_count: int
@@ -50,7 +49,6 @@ class RetrieveRequest(BaseModel):
 class Citation(BaseModel):
     chunk_id: str
     doc_id: str
-    source: str
     filename: str
     page: int | None
     score: float

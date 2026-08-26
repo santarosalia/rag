@@ -32,6 +32,18 @@
 - Graph RAG / Agentic RAG
 - 사용자 피드백 기반 online learning
 
+### 1.4 Ingest 분리 (별도 프로젝트)
+
+Ingest(파싱·청킹·임베딩·Kiwi morph·PG 적재)를 **외부 서비스**로 두고, 이 저장소는 **RAG(query/retrieve) 전용**으로 운영할 수 있다.
+
+| 구분 | 담당 |
+|------|------|
+| Ingest 프로젝트 | 업로드, 파싱, chunking, embedding, Kiwi morph, PG `documents`/`chunks` 적재, S3 |
+| RAG 프로젝트 (본 저장소) | pgvector kNN + FTS retrieve, rerank, LLM, citation |
+
+pgvector 단일 스택에서는 citation이 **`documents` JOIN `chunks`**에 의존하므로, ingest는 **공유 PostgreSQL + 동일 스키마**가 필수다.  
+→ 상세: [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md)
+
 ---
 
 ## 2. 아키텍처
@@ -134,8 +146,7 @@ Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
 |------|------|------|
 | id | UUID | 문서 ID |
 | tenant_id | string | 멀티테넌시 (optional) |
-| filename | string | 원본 파일명 |
-| source | string | 출처 식별자 |
+| filename | string | 원본 파일명 (citation 표시) |
 | content_hash | SHA256 | 중복/변경 감지 |
 | status | enum | pending → processing → completed / failed |
 | chunk_count | int | 인덱싱된 청크 수 |
@@ -263,7 +274,6 @@ score(chunk) = Σ  1 / (k + rank_i)
     {
       "chunk_id": "uuid",
       "doc_id": "uuid",
-      "source": "rag-guide.pdf",
       "filename": "rag-guide.pdf",
       "page": 3,
       "score": 0.92,
@@ -420,6 +430,7 @@ CI에서 Recall@5, MRR threshold gate.
 | PostgreSQL 검색 부하 | 쿼리 지연 | HNSW/GIN 튜닝, read replica, connection pool |
 | LLM 비용 | 운영 비용 증가 | retrieve-only endpoint, context budget |
 | 모델 cold start | 첫 요청 지연 | model cache volume, warm-up job |
+| Ingest 분리 시 메타 누락 | citation·검색 JOIN 실패 | [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md) PG 계약 + integration test |
 
 ---
 
@@ -428,3 +439,4 @@ CI에서 Recall@5, MRR threshold gate.
 - [README](../README.md) — Quick Start, API 레퍼런스
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
 - [adr/](adr/) — Architecture Decision Records
+- [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md) — Ingest/RAG 분리·메타데이터 계약

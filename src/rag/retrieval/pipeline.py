@@ -114,7 +114,6 @@ class RetrievalPipeline:
                 Citation(
                     chunk_id=str(hit.get("chunk_id", "")),
                     doc_id=str(hit.get("doc_id", "")),
-                    source=hit.get("source", ""),
                     filename=hit.get("filename", ""),
                     page=hit.get("page"),
                     score=float(score),
