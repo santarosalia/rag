@@ -90,6 +90,12 @@ cp .env.example .env
 docker compose up -d
 ```
 
+로컬에서 소스를 마운트해 코드 변경을 재빌드 없이 반영하려면:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+```
+
 OpenSearch health check 통과까지 약 1~2분 소요.  
 첫 질의 시 BGE-M3 / reranker 모델 다운로드로 추가 시간이 걸릴 수 있습니다.
 

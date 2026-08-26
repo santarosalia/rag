@@ -19,10 +19,13 @@ models:
   device: "cpu"
 
 llm:
-  provider: "openai"
-  model: "gpt-4o-mini"
+  provider: "vllm"
+  model: "Qwen/Qwen3.5-35B-A3B-FP8"
   temperature: 0.1
   max_tokens: 1024
+  extra_body:
+    chat_template_kwargs:
+      enable_thinking: false
   system_prompt: |
     You are a helpful assistant that answers questions based on the provided context.
     Always cite sources using [1], [2], etc. matching the context numbering.
@@ -50,4 +53,4 @@ rate_limit:
   requests_per_minute: 60
 
 search:
-  backend: opensearch  # opensearch | pgvector
+  backend: opensearch # opensearch | pgvector

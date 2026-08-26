@@ -71,10 +71,15 @@ services:
       - redis_data:/data
 
   opensearch:
-    image: opensearchproject/opensearch:2.17.1
+    build:
+      context: ./docker
+      dockerfile: opensearch.Dockerfile
+    image: rag-opensearch:2.17.1-nori
     environment:
       discovery.type: single-node
-      plugins.security.disabled: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "RagDevAdmin_123!"
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
       bootstrap.memory_lock: "true"
     ulimits:
@@ -91,6 +96,17 @@ services:
       timeout: 5s
       retries: 20
 
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.17.1
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -99,7 +115,7 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
       - "9000:9000"
-      - "9001:9001"
+      - "9090:9001"
     volumes:
       - minio_data:/data
 

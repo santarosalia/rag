@@ -1,4 +1,4 @@
-from rag.generation.llm import build_context
+from rag.generation.llm import LLMGenerator, build_context
 from rag.models.schemas import Citation
 
 
@@ -46,3 +46,61 @@ def test_build_context_numbering():
     assert "[1]" in context
     assert "doc.pdf" in context
     assert "page 3" in context
+
+
+class _FakeResponse:
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+
+class _FakeClient:
+    last_json: dict | None = None
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args) -> None:
+        return None
+
+    async def post(self, url, headers=None, json=None):
+        _FakeClient.last_json = json
+        return _FakeResponse()
+
+
+def test_generate_merges_extra_body_into_request(monkeypatch):
+    monkeypatch.setattr("rag.generation.llm.httpx.AsyncClient", _FakeClient)
+    monkeypatch.setattr(
+        "rag.generation.llm.get_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "llm_api_key": "dummy",
+                "llm_base_url": "http://llm/v1",
+                "yaml_config": {
+                    "llm": {
+                        "model": "Qwen/Qwen3.5-35B-A3B-FP8",
+                        "temperature": 0.1,
+                        "max_tokens": 16,
+                        "extra_body": {
+                            "chat_template_kwargs": {"enable_thinking": False},
+                        },
+                    }
+                },
+            },
+        )(),
+    )
+
+    import asyncio
+
+    asyncio.run(LLMGenerator().generate("q", "ctx"))
+    payload = _FakeClient.last_json
+    assert payload is not None
+    assert payload["model"] == "Qwen/Qwen3.5-35B-A3B-FP8"
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}

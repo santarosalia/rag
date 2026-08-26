@@ -1,0 +1,34 @@
+# Local overlay: bind-mount source so host edits apply without image rebuild.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+#
+# API: uvicorn --reload
+# Worker: watchfiles 가 src 변경 시 Celery 를 재시작
+
+services:
+  api:
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+    command: >
+      uvicorn rag.api.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/src
+      --reload-dir /app/configs
+
+  worker:
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+    command:
+      - watchfiles
+      - --filter
+      - python
+      - celery -A rag.workers.celery_app worker --loglevel=info --concurrency=2
+      - /app/src

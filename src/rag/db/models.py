@@ -26,6 +26,10 @@ class JobStatus(enum.StrEnum):
     FAILED = "failed"
 
 
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    return [member.value for member in enum_cls]
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -37,7 +41,13 @@ class Document(Base):
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     s3_key: Mapped[str] = mapped_column(String(1024))
     status: Mapped[DocumentStatus] = mapped_column(
-        Enum(DocumentStatus), default=DocumentStatus.PENDING, index=True
+        Enum(
+            DocumentStatus,
+            name="documentstatus",
+            values_callable=_enum_values,
+        ),
+        default=DocumentStatus.PENDING,
+        index=True,
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -83,7 +93,13 @@ class IngestJob(Base):
     )
     idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     status: Mapped[JobStatus] = mapped_column(
-        Enum(JobStatus), default=JobStatus.PENDING, index=True
+        Enum(
+            JobStatus,
+            name="jobstatus",
+            values_callable=_enum_values,
+        ),
+        default=JobStatus.PENDING,
+        index=True,
     )
     celery_task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

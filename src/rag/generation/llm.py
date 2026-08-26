@@ -42,6 +42,7 @@ class LLMGenerator:
             "system_prompt",
             "Answer based on the provided context. Cite sources using [1], [2], etc.",
         )
+        self.extra_body = llm_cfg.get("extra_body") or {}
 
     async def generate(self, query: str, context: str) -> str:
         if not self.api_key:
@@ -69,6 +70,7 @@ class LLMGenerator:
                         "messages": messages,
                         "temperature": self.temperature,
                         "max_tokens": self.max_tokens,
+                        **self.extra_body,
                     },
                 )
                 response.raise_for_status()
@@ -77,6 +79,14 @@ class LLMGenerator:
                 latency = time.perf_counter() - t0
                 LLM_LATENCY.observe(latency)
                 return answer
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "llm_generation_failed",
+                error=str(e),
+                status_code=e.response.status_code,
+                body=e.response.text[:1000],
+            )
+            return self._fallback_answer(query, context)
         except Exception as e:
             logger.error("llm_generation_failed", error=str(e))
             return self._fallback_answer(query, context)
