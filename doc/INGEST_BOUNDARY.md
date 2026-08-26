@@ -16,6 +16,8 @@
 
 **메타데이터 유실 방지:** ingest가 `documents` 행과 `chunks` 검색 컬럼(`embedding`, `content_morph`, `tsv`)을 빠짐없이 채워야 citation·tenant 필터·검색이 동작한다.
 
+**중간 포맷:** 외부 ingest는 원본(PDF/DOCX/PPTX 등)을 **[MarkItDown](https://github.com/microsoft/markitdown)으로 Markdown 변환한 뒤** chunking하는 것을 **표준 파이프라인**으로 고정한다. RAG는 변환된 Markdown을 직접 받지 않고, ingest가 적재한 PostgreSQL만 읽는다.
+
 ---
 
 ## 2. 현재 메타데이터가 흐르는 경로
@@ -83,7 +85,7 @@ WHERE c.embedding IS NOT NULL
 | `source`/`filename`/`page` 누락 | citation 출처 표시 불가 (**핵심 리스크**) |
 | Kiwi morph 생략 (`content_morph`, `tsv` 불일치) | 한국어 sparse recall 저하 |
 | ingest가 자체 doc_id/chunk_id 체계 사용 | RAG 삭제·추적 불일치 |
-| `tenant_id` 누�락 | tenant 격리 검색 무력화 |
+| `tenant_id` 누락 | tenant 격리 검색 무력화 |
 
 ---
 
@@ -110,9 +112,84 @@ WHERE c.embedding IS NOT NULL
 
 ---
 
-## 5. Ingest → PostgreSQL 계약
+## 5. MarkItDown 중간 포맷 (표준)
 
-### 5.1 문서 (`documents`)
+### 5.1 왜 Markdown으로 고정하는가
+
+| 이점 | 설명 |
+|------|------|
+| **단일 파싱 경로** | ingest 내부에서 PDF/DOCX/PPTX/HTML 등 → MarkItDown → `.md` 한 경로 |
+| **LLM/RAG 친화** | 제목·목록·표 구조 유지 → Semantic Chunker 경계 품질 향상 |
+| **RAG 단순화** | 본 저장소는 PyMuPDF/BeautifulSoup 등 **포맷 파서 불필요** |
+| **포맷 확장** | MarkItDown `[all]` extras로 Office·이미지(OCR) 등 ingest 측에서 흡수 |
+
+MarkItDown은 **고품질 인쇄용 변환**이 아니라 **텍스트 분석·LLM ingest용** 도구임을 전제로 한다.
+
+### 5.2 ingest 파이프라인 (고정)
+
+```
+원본 파일 (any)
+  → MarkItDown.convert*()
+  → Markdown 텍스트 (+ 선택: S3에 {doc_id}.md 저장)
+  → Semantic Chunker (헤딩 `#`/`##` 경계 우선)
+  → BGE-M3 embed + Kiwi morph
+  → PostgreSQL documents/chunks
+```
+
+`*` MarkItDown API: 로컬 파일은 `convert_local()`, URL은 `convert()` / `convert_stream()` 등 입력 유형에 맞는 메서드 사용.
+
+RAG 계약 경계는 **PostgreSQL**이다. Markdown 파일/API로 RAG에 직접 넘기지 않는다.
+
+### 5.3 `documents` 메타데이터 규칙 (원본 vs 변환본)
+
+| 필드 | 값 | 비고 |
+|------|-----|------|
+| `filename` | **원본** 파일명 (`세무조사.pdf`) | citation UI용 |
+| `source` | 논리적 출처 경로 | 변경 없음 |
+| `content_type` | **원본** MIME (`application/pdf`) | 변환본 MIME 아님 |
+| `content_hash` | **원본** 바이트 SHA256 | 중복 업로드 감지 |
+| `s3_key` | 원본 객체 키 | 감사·재처리 |
+| (선택) `extra_metadata.converted_s3_key` | `{doc_id}.md` | re-chunk·디버깅용 |
+
+변환본 Markdown hash는 `extra_metadata.markdown_hash` 등으로 **선택** 기록 (re-chunk 트리거용).
+
+### 5.4 page(citation) 보존 — **필수 설계 결정**
+
+MarkItDown 기본 출력은 **단일 Markdown 스트림**이라 PDF **페이지 번호가 사라질 수 있다.**
+
+| 전략 | `chunks.page` | 권장 |
+|------|---------------|------|
+| A. page 포기 | `null` | MD/일반 문서, page citation 불필요 시 |
+| B. ingest가 페이지 마커 주입 | MarkItDown 전후 또는 PDF 페이지별 convert 후 `<!-- page: N -->` 삽입 → chunker가 파싱 | **PDF citation 필요 시 권장** |
+| C. Azure Document Intelligence (`[az-doc-intel]`) | bbox/page 메타 확보 | 스캔 PDF·복잡 레이아웃 |
+
+**계약:** PDF 등 page citation이 필요한 tenant/문서유형은 ingest가 **B 또는 C**를 적용하고, 불가 시 `page: null`을 명시적으로 허용한다.
+
+### 5.5 Chunking 규칙 (Markdown 입력)
+
+- `#` / `##` / `###` 헤딩 경계 **우선** 분할 (현재 SemanticChunker 문단 경계와 병행)
+- 표(table)는 **가능한 한 하나의 chunk에 유지** (행 단위 분할 지양)
+- 코드블록·목록은 overlap(`overlap_tokens`)으로 경계 recall 보완
+
+### 5.6 MarkItDown 운영 주의
+
+| 항목 | 내용 |
+|------|------|
+| 의존성 | `pip install 'markitdown[all]'` 또는 포맷별 extras (`[pdf]`, `[docx]` …) |
+| 품질 | 스캔 PDF·한글 복잡 레이아웃 → golden set으로 ingest 품질 gate |
+| OCR/이미지 | MarkItDown LLM 연동 시 **ingest 측** 비용·지연 — RAG와 분리 |
+| 버전 고정 | ingest `markitdown==x.y.z` pin → 변환 결과 drift 방지 |
+
+### 5.7 품질 검증 (ingest 책임)
+
+- 원본 → MD → chunk 샘플을 ingest golden set에 저장
+- RAG `/v1/retrieve` Recall@5는 **최종 chunk 품질**을 반영 — MD 변환 품질 저하는 ingest CI에서 먼저 걸러야 함
+
+---
+
+## 6. Ingest → PostgreSQL 계약
+
+### 6.1 문서 (`documents`)
 
 ```json
 {
@@ -130,7 +207,7 @@ WHERE c.embedding IS NOT NULL
 
 `source`가 없으면 ingest에서 `filename`으로 fallback (현재 monolith와 동일).
 
-### 5.2 청크 (`chunks`) — 1단계 INSERT
+### 6.2 청크 (`chunks`) — 1단계 INSERT
 
 ```json
 {
@@ -145,7 +222,7 @@ WHERE c.embedding IS NOT NULL
 }
 ```
 
-### 5.3 청크 — 2단계 검색 컬럼 UPDATE (ingest 필수)
+### 6.3 청크 — 2단계 검색 컬럼 UPDATE (ingest 필수)
 
 ingest는 `PgVectorBackend.bulk_index()`와 동등하게 아래를 수행해야 한다:
 
@@ -157,7 +234,7 @@ ingest는 `PgVectorBackend.bulk_index()`와 동등하게 아래를 수행해야 
 
 **embedding 모델·차원·Kiwi analyzer는 RAG와 ingest가 동일해야 한다** (ADR-0003: `BAAI/bge-m3`).
 
-### 5.4 `build_index_document()` 페이로드 (monolith 호환)
+### 6.4 `build_index_document()` 페이로드 (monolith 호환)
 
 ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 
@@ -181,7 +258,7 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 
 ---
 
-## 6. 이 프로젝트(RAG)에서 제거·유지할 범위
+## 7. 이 프로젝트(RAG)에서 제거·유지할 범위
 
 ### Ingest 프로젝트로 이전
 
@@ -211,7 +288,7 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 
 ---
 
-## 7. Ingest 분리 체크리스트
+## 8. Ingest 분리 체크리스트
 
 - [ ] ingest와 RAG **동일 PostgreSQL** (스키마·migration 공유 또는 ingest가 migration 소유)
 - [ ] `documents.status = completed` **후** chunk embedding/tsv UPDATE
@@ -219,7 +296,8 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 - [ ] citation 5종 non-empty: `chunk_id`, `doc_id`, `source`, `filename`, `page`(nullable)
 - [ ] `tenant_id` 문서·청크 양쪽 기록
 - [ ] 삭제: `documents.status = deleted` + `chunks.embedding/content_morph/tsv = NULL`
-- [ ] integration test: ingest golden doc → RAG `/v1/retrieve` → citation 필드 assert
+- [ ] MarkItDown 변환 + Markdown chunking 파이프라인 golden set CI
+- [ ] PDF page citation 필요 시 page 마커 또는 Doc Intelligence 적용
 
 ---
 
