@@ -38,7 +38,6 @@ async def test_retrieve_with_api_key(app, monkeypatch):
                 Citation(
                     chunk_id="c1",
                     doc_id="d1",
-                    source="test",
                     filename="test.txt",
                     page=None,
                     score=0.95,

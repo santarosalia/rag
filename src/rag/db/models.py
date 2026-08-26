@@ -36,7 +36,6 @@ class Document(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     filename: Mapped[str] = mapped_column(String(512))
-    source: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(128))
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     s3_key: Mapped[str] = mapped_column(String(1024))

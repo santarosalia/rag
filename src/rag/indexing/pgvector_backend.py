@@ -130,7 +130,6 @@ class PgVectorBackend:
                 c.id::text AS chunk_id,
                 c.doc_id::text AS doc_id,
                 c.content,
-                d.source,
                 d.filename,
                 c.page,
                 1 - (c.embedding <=> CAST(:embedding AS vector)) AS score
@@ -168,7 +167,6 @@ class PgVectorBackend:
                 c.id::text AS chunk_id,
                 c.doc_id::text AS doc_id,
                 c.content,
-                d.source,
                 d.filename,
                 c.page,
                 ts_rank(c.tsv, plainto_tsquery('simple', :morph_query)) AS score
@@ -198,7 +196,6 @@ class PgVectorBackend:
                     "chunk_id": row["chunk_id"],
                     "doc_id": row["doc_id"],
                     "content": row["content"] or "",
-                    "source": row["source"] or "",
                     "filename": row["filename"] or "",
                     "page": row["page"],
                     "score": float(row["score"] or 0.0),

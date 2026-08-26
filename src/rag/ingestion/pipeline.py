@@ -93,7 +93,6 @@ class IngestionPipeline:
                         content=text_chunk.content,
                         embedding=embedding,
                         tenant_id=document.tenant_id,
-                        source=document.source,
                         filename=document.filename,
                         page=text_chunk.page,
                         chunk_index=text_chunk.chunk_index,
@@ -144,11 +143,9 @@ async def create_document_record(
     content_hash: str,
     s3_key: str,
     tenant_id: str | None = None,
-    source: str | None = None,
 ) -> tuple[Document, IngestJob]:
     document = Document(
         filename=filename,
-        source=source or filename,
         content_type=content_type,
         content_hash=content_hash,
         s3_key=s3_key,
