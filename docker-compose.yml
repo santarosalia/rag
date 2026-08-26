@@ -34,6 +34,13 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       OPENSEARCH_URL: http://opensearch:9200
       S3_ENDPOINT: http://minio:9000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,7 +98,11 @@ services:
     volumes:
       - opensearch_data:/usr/share/opensearch/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
       interval: 10s
       timeout: 5s
       retries: 20
