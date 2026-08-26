@@ -43,7 +43,8 @@ Query → Dense kNN + BM25 Sparse → RRF Fusion → Cross-encoder Rerank → LL
 
 > 상세 기획: [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md)  
 > 아키텍처 상세: [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md)  
-> **검색 백엔드 전환:** [`doc/SEARCH_BACKENDS.md`](doc/SEARCH_BACKENDS.md)
+> **검색 백엔드 전환:** [`doc/SEARCH_BACKENDS.md`](doc/SEARCH_BACKENDS.md)  
+> **Ingest 분리·메타데이터 계약:** [`doc/INGEST_BOUNDARY.md`](doc/INGEST_BOUNDARY.md)
 
 ---
 

@@ -32,6 +32,18 @@
 - Graph RAG / Agentic RAG
 - 사용자 피드백 기반 online learning
 
+### 1.4 Ingest 분리 (별도 프로젝트)
+
+Ingest(파싱·청킹·임베딩·인덱싱)를 **외부 서비스**로 두고, 이 저장소는 **RAG(query/retrieve) 전용**으로 운영하는 구성을 지원한다.
+
+| 구분 | 담당 |
+|------|------|
+| Ingest 프로젝트 | 업로드, 파싱, chunking, embedding, PG/OpenSearch 적재, 원본(S3) 보관 |
+| RAG 프로젝트 (본 저장소) | hybrid retrieve, rerank, LLM generate, citation |
+
+**메타데이터 유실 방지:** ingest ↔ RAG 간 **청크·문서 메타데이터 계약**이 필수다. OpenSearch는 citation 필드를 인덱스에 비정규화하고, pgvector는 `documents` JOIN에 의존하므로 공유 PostgreSQL 또는 dual-write가 필요하다.  
+→ 상세: [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md)
+
 ---
 
 ## 2. 아키텍처
@@ -428,6 +440,7 @@ CI에서 Recall@5, MRR threshold gate.
 | OpenSearch SPOF | 검색 불가 | replica ≥ 1, snapshot backup |
 | LLM 비용 | 운영 비용 증가 | retrieve-only endpoint, context budget |
 | 모델 cold start | 첫 요청 지연 | model cache volume, warm-up job |
+| Ingest 분리 시 메타 누락 | citation 출처·tenant 필터 실패 | [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md) 계약 + integration test |
 
 ---
 
@@ -436,3 +449,4 @@ CI에서 Recall@5, MRR threshold gate.
 - [README](../README.md) — Quick Start, API 레퍼런스
 - [SEARCH_BACKENDS.md](SEARCH_BACKENDS.md) — OpenSearch ↔ pgvector 전환
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램
+- [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md) — Ingest/RAG 분리·메타데이터 계약

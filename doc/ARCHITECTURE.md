@@ -126,6 +126,40 @@ src/rag/
 └── config.py
 ```
 
+## Ingest / RAG 분리
+
+Ingest를 별도 프로젝트로 운영할 때:
+
+```mermaid
+flowchart LR
+  subgraph ingest_svc [Ingest Service]
+    Upload[Upload / Parse / Chunk]
+    Embed[Embed + Index Write]
+  end
+
+  subgraph rag_svc [RAG Service - this repo]
+    Retrieve[POST /v1/retrieve]
+    Query[POST /v1/query]
+  end
+
+  subgraph data [Shared or Index-only Storage]
+    PG[(PostgreSQL documents/chunks)]
+    OS[(OpenSearch)]
+  end
+
+  Upload --> Embed
+  Embed --> PG
+  Embed --> OS
+  Retrieve --> PG
+  Retrieve --> OS
+  Query --> Retrieve
+```
+
+- **pgvector:** ingest가 `documents` + `chunks`를 기록해야 검색 JOIN·citation이 동작한다.
+- **opensearch:** ingest가 `source`, `filename`, `page` 등을 **인덱스 문서에 포함**해야 query 시 PG 없이 citation이 나온다.
+
+메타데이터 계약·체크리스트: [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md)
+
 ## 확장 포인트
 
 | 확장 | 방법 |
