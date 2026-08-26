@@ -37,7 +37,7 @@ Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citatio
 | Reranker | BAAI/bge-reranker-v2-m3 |
 | LLM | OpenAI-compatible API |
 
-> [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/adr/`](doc/adr/)
+> [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/adr/`](doc/adr/) · [`doc/INGEST_BOUNDARY.md`](doc/INGEST_BOUNDARY.md)
 
 ---
 
