@@ -14,12 +14,6 @@ def main() -> None:
     parser.add_argument("--api-url", default="http://localhost:8000")
     parser.add_argument("--api-key", default="dev-api-key-change-me")
     parser.add_argument("--mode", default="hybrid", choices=["hybrid", "dense", "sparse"])
-    parser.add_argument(
-        "--backend",
-        default=None,
-        choices=["opensearch", "pgvector"],
-        help="Search backend override (default: server SEARCH_BACKEND)",
-    )
     parser.add_argument("--iterations", type=int, default=10)
     args = parser.parse_args()
 
@@ -28,9 +22,7 @@ def main() -> None:
 
     latencies: list[float] = []
     for i in range(args.iterations):
-        payload: dict = {"query": args.query, "mode": args.mode, "rerank": True}
-        if args.backend:
-            payload["backend"] = args.backend
+        payload = {"query": args.query, "mode": args.mode, "rerank": True}
 
         t0 = time.perf_counter()
         response = client.post("/v1/retrieve", json=payload)
@@ -44,8 +36,7 @@ def main() -> None:
             f"citations={len(result['citations'])}"
         )
 
-    print(f"\nBackend: {args.backend or 'server default'}")
-    print(f"Mode: {args.mode}")
+    print(f"\nMode: {args.mode}")
     print(f"Mean: {statistics.mean(latencies):.1f}ms")
     print(f"P50:  {statistics.median(latencies):.1f}ms")
     if len(latencies) >= 2:

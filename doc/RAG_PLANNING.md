@@ -2,8 +2,8 @@
 
 > **프로젝트명:** Hybrid RAG Platform  
 > **버전:** 0.1.0  
-> **최종 수정:** 2026-08-25  
-> **상태:** Phase 1 구현 완료 + Dual Search Backend (OpenSearch / pgvector)
+> **최종 수정:** 2026-08-26  
+> **상태:** Phase 1 구현 완료 (pgvector + Kiwi FTS)
 
 ---
 
@@ -22,8 +22,8 @@
 | **답변 신뢰도** | 출처(citation) 포함 답변 | 모든 `/v1/query` 응답에 citations[] 포함 |
 | **확장성** | 대량 문서 비동기 처리 | Celery worker horizontal scale-out |
 | **운영성** | 관측·배포·복구 가능 | Prometheus metrics, K8s manifests, reindex runbook |
-| **다국어** | 한국어/영어 혼합 문서 | Nori(OpenSearch) / Kiwi(pgvector) + BGE-M3 |
-| **백엔드 비교** | OpenSearch vs PG pgvector A/B | `SEARCH_BACKEND` / API `backend` 파라미터 |
+| **다국어** | 한국어/영어 혼합 문서 | Kiwi 형태소 분석 + BGE-M3 |
+| **단일 DB** | 메타·벡터·FTS 통합 | PostgreSQL pgvector + tsvector |
 
 ### 1.3 비목표 (Out of Scope — Phase 1)
 
@@ -34,14 +34,14 @@
 
 ### 1.4 Ingest 분리 (별도 프로젝트)
 
-Ingest(파싱·청킹·임베딩·인덱싱)를 **외부 서비스**로 두고, 이 저장소는 **RAG(query/retrieve) 전용**으로 운영하는 구성을 지원한다.
+Ingest(파싱·청킹·임베딩·Kiwi morph·PG 적재)를 **외부 서비스**로 두고, 이 저장소는 **RAG(query/retrieve) 전용**으로 운영할 수 있다.
 
 | 구분 | 담당 |
 |------|------|
-| Ingest 프로젝트 | 업로드, 파싱, chunking, embedding, PG/OpenSearch 적재, 원본(S3) 보관 |
-| RAG 프로젝트 (본 저장소) | hybrid retrieve, rerank, LLM generate, citation |
+| Ingest 프로젝트 | 업로드, 파싱, chunking, BGE-M3 embedding, Kiwi morph, PG `documents`/`chunks` 적재, S3 |
+| RAG 프로젝트 (본 저장소) | pgvector kNN + FTS retrieve, rerank, LLM, citation |
 
-**메타데이터 유실 방지:** ingest ↔ RAG 간 **청크·문서 메타데이터 계약**이 필수다. OpenSearch는 citation 필드를 인덱스에 비정규화하고, pgvector는 `documents` JOIN에 의존하므로 공유 PostgreSQL 또는 dual-write가 필요하다.  
+pgvector 단일 스택에서는 citation이 **`documents` JOIN `chunks`**에 의존하므로, ingest는 **공유 PostgreSQL + 동일 스키마**가 필수다.  
 → 상세: [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md)
 
 ---
@@ -72,8 +72,8 @@ Ingest(파싱·청킹·임베딩·인덱싱)를 **외부 서비스**로 두고, 
         ▼                                │
 ┌───────────────────────────────────────────────────┐
 │                   Storage Layer                    │
-│  PostgreSQL (metadata)  │  MinIO/S3 (originals)  │
-│  OpenSearch (hybrid index)  │  Redis (cache/queue) │
+│  PostgreSQL (metadata + pgvector + FTS)            │
+│  MinIO/S3 (originals)  │  Redis (cache/queue)     │
 └───────────────────────────────────────────────────┘
 ```
 
@@ -83,35 +83,24 @@ Ingest(파싱·청킹·임베딩·인덱싱)를 **외부 서비스**로 두고, 
 |--------|------|-----------|
 | API | FastAPI + Uvicorn | async, OpenAPI 자동 생성, 높은 처리량 |
 | Queue | Celery + Redis | 검증된 비동기 작업 큐, retry/DLQ 지원 |
-| Vector + Sparse | OpenSearch 2.x | BM25 + kNN 단일 클러스터 운영, Nori 한국어 지원 |
-| Metadata DB | PostgreSQL 16 | ACID, 문서/청크/잡 상태 관리 |
+| Search | PostgreSQL 16 + pgvector | HNSW kNN + GIN FTS 단일 DB 운영 |
+| Sparse | Kiwi (`kiwipiepy`) + tsvector | 한국어 형태소 분석, `simple` tsconfig |
+| Metadata DB | PostgreSQL 16 | ACID, 문서/청크/잡 상태 + 검색 인덱스 통합 |
 | Object Storage | MinIO / S3 | 원본 파일 보존, reindex 시 재처리 |
 | Embedding | BAAI/bge-m3 | 다국어, 1024-dim, self-host 비용 통제 |
 | Reranker | BAAI/bge-reranker-v2-m3 | Cross-encoder, 한영 혼합 문서 강점 |
 | LLM | OpenAI-compatible API | 설정으로 provider 교체 가능 |
 | Container | Docker Compose (dev), K8s (prod) | 환경 일관성 |
 
-### 2.3 왜 OpenSearch 단일 클러스터인가?
+### 2.3 왜 PostgreSQL 단일 DB인가?
 
-Dense(Qdrant) + Sparse(Elasticsearch) 분리 대비:
+메타데이터 DB와 검색 스토어 분리 대비:
 
-- **운영 포인트 1개** — 인덱스 관리, 백업, 모니터링 단순화
-- **하이브리드 쿼리** — 동일 문서에 BM25 + kNN 공존
-- **한국어 BM25** — Nori analyzer 내장
+- **운영 포인트 1개** — 백업, 모니터링, 트랜잭션 일관성
+- **하이브리드 검색** — 동일 `chunks` 행에 embedding + tsv 공존
+- **한국어 Sparse** — Kiwi 형태소 → `content_morph` → `to_tsvector('simple', …)`
 
-벡터 QPS > 500/s 또는 billion-scale이 필요해지면 Phase 3에서 Qdrant 분리를 검토한다.
-
-### 2.4 Dual Search Backend (Phase 1.5 — 구현 완료)
-
-동일 RAG 파이프라인(RRF, Rerank, LLM) 위에 검색/인덱스 레이어만 플러그인으로 교체한다.
-
-| Backend | Dense | Sparse | 저장 |
-|---------|-------|--------|------|
-| `opensearch` | kNN HNSW | BM25 + Nori | OpenSearch |
-| `pgvector` | pgvector HNSW | FTS + Kiwi (`kiwipiepy`) | PostgreSQL `chunks` |
-
-전환 방법: `SEARCH_BACKEND` env, API `backend` 필드, `benchmark_retrieval.py --backend`.  
-상세: [`SEARCH_BACKENDS.md`](SEARCH_BACKENDS.md)
+벡터 QPS > 500/s 또는 billion-scale이 필요해지면 Phase 3에서 전용 벡터 DB(Qdrant 등) 분리를 검토한다.
 
 ---
 
@@ -121,7 +110,8 @@ Dense(Qdrant) + Sparse(Elasticsearch) 분리 대비:
 
 ```
 Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
-       → Embedding (BGE-M3) → Bulk Index (OpenSearch) → PostgreSQL 상태 갱신
+       → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
+       → PostgreSQL documents 상태 갱신
 ```
 
 ### 3.2 지원 문서 포맷
@@ -162,15 +152,17 @@ Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
 | status | enum | pending → processing → completed / failed |
 | chunk_count | int | 인덱싱된 청크 수 |
 
-**OpenSearch `rag-chunks` (alias)**
+**PostgreSQL `chunks` (검색 인덱스)**
 
 | 필드 | 타입 | 용도 |
 |------|------|------|
-| chunk_id | keyword | 청크 고유 ID |
-| doc_id | keyword | 문서 ID |
-| content | text (Nori) | BM25 sparse 검색 |
-| embedding | knn_vector (1024) | Dense kNN 검색 |
-| page, filename, source | metadata | citation / filter |
+| id | UUID | 청크 고유 ID |
+| doc_id | UUID | 문서 FK |
+| content | text | 원문 (citation snippet) |
+| content_morph | text | Kiwi 형태소 분석 결과 |
+| embedding | vector(1024) | Dense kNN (HNSW) |
+| tsv | tsvector | FTS sparse 검색 (GIN) |
+| page, tenant_id | metadata | citation / filter |
 
 ### 3.5 Idempotency
 
@@ -187,9 +179,9 @@ Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
 ```
 Query
   │
-  ├─► [1] Dense kNN ──────► top-50 (BGE-M3 embedding)
+  ├─► [1] Dense kNN ──────► top-50 (pgvector, BGE-M3 embedding)
   │
-  ├─► [2] BM25 Sparse ────► top-50 (Nori + multi_match)
+  ├─► [2] FTS Sparse ─────► top-50 (Kiwi morph + ts_rank)
   │
   ├─► [3] RRF Fusion ─────► merged top-50 (k=60)
   │
@@ -200,16 +192,16 @@ Query
 
 ### 4.2 Dense Retrieval (의미 검색)
 
-- **모델:** BGE-M3, 1024-dim, cosine similarity
-- **인덱스:** OpenSearch HNSW (m=16, ef_construction=128, ef_search=100)
+- **모델:** BGE-M3, 1024-dim, cosine similarity (`<=>` 연산자)
+- **인덱스:** pgvector HNSW (`vector_cosine_ops`)
 - **캐시:** Redis query embedding cache (TTL 1h)
 - **적합 쿼리:** 개념/의미 기반 질문, paraphrase, 다국어
 
 ### 4.3 Sparse Retrieval (키워드 검색)
 
-- **알고리즘:** BM25 via OpenSearch multi_match
-- **Analyzer:** Nori (한국어) + english + standard fields
-- **fuzziness:** AUTO (오타 허용)
+- **알고리즘:** PostgreSQL FTS — `ts_rank` + `plainto_tsquery('simple', …)`
+- **형태소:** Kiwi (`kiwipiepy`) — 쿼리·문서 모두 `content_morph` 경유
+- **인덱스:** GIN on `tsv`
 - **적합 쿼리:** 고유명사, 코드, 숫자, 정확한 용어
 
 ### 4.4 RRF Fusion (Reciprocal Rank Fusion)
@@ -243,7 +235,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 |------|------|-----------|
 | `hybrid` | Dense + Sparse + RRF + Rerank | **기본값**, 일반 질의 |
 | `dense` | kNN only + Rerank | 의미 검색 디버깅 |
-| `sparse` | BM25 only + Rerank | 키워드 검색 디버깅 |
+| `sparse` | FTS only + Rerank | 키워드 검색 디버깅 |
 
 ---
 
@@ -255,11 +247,11 @@ score(chunk) = Σ  1 / (k + rank_i)
 |--------|------|------|------|
 | POST | `/v1/documents` | 문서 업로드 → ingest job | API Key |
 | GET | `/v1/documents/{id}` | 문서/인덱싱 상태 조회 | API Key |
-| DELETE | `/v1/documents/{id}` | 소프트 삭제 + 인덱스 제거 | API Key |
+| DELETE | `/v1/documents/{id}` | 소프트 삭제 + 검색 필드 NULL | API Key |
 | POST | `/v1/retrieve` | 검색만 (LLM 없음) | API Key |
 | POST | `/v1/query` | Hybrid search + generate | API Key |
 | GET | `/health` | Liveness | 없음 |
-| GET | `/ready` | Readiness (PG/Redis/OS) | 없음 |
+| GET | `/ready` | Readiness (PG/Redis/pgvector) | 없음 |
 | GET | `/metrics` | Prometheus | 없음 |
 
 ### 5.2 Request / Response 예시
@@ -277,6 +269,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 // Response
 {
   "query": "하이브리드 검색이란?",
+  "backend": "pgvector",
   "answer": "하이브리드 검색은 Dense(의미)와 Sparse(키워드) 검색을 결합하는 방식입니다 [1][2].",
   "citations": [
     {
@@ -307,7 +300,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 |------|---------|---------|
 | 인증 | X-API-Key | JWT + API Key |
 | Rate Limit | Redis sliding window (60 req/min) | per-tenant limit |
-| Tenant isolation | tenant_id filter on search | index-level isolation |
+| Tenant isolation | tenant_id filter on search | row-level / schema isolation |
 
 ---
 
@@ -319,7 +312,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 | Ingest throughput | > 100 docs/hour | worker concurrency=2 |
 | Retrieval Recall@5 | ≥ 0.8 | golden eval set |
 | API availability | 99.9% | K8s 2+ replicas |
-| Index size | ~30GB/shard | OpenSearch shard sizing |
+| Index size | ~50GB/인스턴스 | PG + HNSW + GIN sizing |
 
 ---
 
@@ -333,7 +326,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 | `rag_llm_latency_seconds` | Histogram | — |
 | `rag_ingest_total` | Counter | status (success/failed) |
 | `rag_query_total` | Counter | endpoint, status |
-| `rag_opensearch_errors_total` | Counter | operation |
+| `rag_search_errors_total` | Counter | operation |
 
 ### 7.2 Logging
 
@@ -352,8 +345,8 @@ score(chunk) = Σ  1 / (k + rank_i)
 ### 8.1 Development
 
 ```bash
-docker compose up -d          # 단일 노드 OpenSearch
-alembic upgrade head          # DB migration
+docker compose up -d          # PostgreSQL (pgvector/pgvector:pg16)
+alembic upgrade head          # DB migration + HNSW/GIN index
 ```
 
 ### 8.2 Production (Kubernetes)
@@ -362,17 +355,16 @@ alembic upgrade head          # DB migration
 deploy/k8s/rag.yaml
 ├── rag-api       Deployment (2 replicas, HPA 2-10)
 ├── rag-worker    Deployment (2 replicas)
-├── opensearch    StatefulSet (3 nodes)
-├── postgres      Deployment
+├── postgres      Deployment (pgvector/pgvector:pg16)
 └── redis         Deployment
 ```
 
-### 8.3 Zero-downtime Reindex
+### 8.3 Reindex (Zero-downtime)
 
-1. 새 인덱스 `rag-chunks-v2` 생성
-2. Worker로 전체 문서 reindex
-3. Alias swap: `rag-chunks` → v2
-4. 검증 후 v1 삭제
+1. Celery worker로 전체 문서 re-ingest (S3 원본 재처리)
+2. `chunks` 행별 embedding / content_morph / tsv 갱신
+3. `documents.status` 및 `chunk_count` 검증
+4. 필요 시 `REINDEX INDEX CONCURRENTLY` (HNSW/GIN)
 
 ---
 
@@ -380,10 +372,10 @@ deploy/k8s/rag.yaml
 
 ### Phase 1 — 코어 RAG ✅ (완료)
 
-- [x] Hybrid retrieval (Dense + Sparse + RRF + Rerank)
+- [x] Hybrid retrieval (pgvector kNN + Kiwi FTS + RRF + Rerank)
 - [x] FastAPI REST API
 - [x] Celery async ingestion
-- [x] OpenSearch hybrid index
+- [x] PostgreSQL 단일 DB 검색
 - [x] Docker Compose + K8s manifests
 - [x] Unit tests + eval benchmark
 - [x] Prometheus metrics
@@ -391,7 +383,7 @@ deploy/k8s/rag.yaml
 ### Phase 2 — 프로덕션 Hardening
 
 - [ ] JWT 인증 + per-tenant rate limit
-- [ ] OpenSearch 3-node cluster 튜닝
+- [ ] PostgreSQL read replica + connection pool 튜닝
 - [ ] Reranker GPU/ONNX 배포
 - [ ] RAGAS eval CI gate
 - [ ] Grafana dashboard
@@ -402,7 +394,7 @@ deploy/k8s/rag.yaml
 - [ ] Parent-child chunking (small chunk 검색 → large context 반환)
 - [ ] Freshness boost (time decay)
 - [ ] User feedback loop (thumbs up/down)
-- [ ] Qdrant 분리 (billion-scale dense)
+- [ ] 전용 벡터 DB 분리 (billion-scale dense; OpenSearch 등 검색 엔진 분리도 선택지)
 
 ---
 
@@ -435,9 +427,9 @@ CI에서 Recall@5, MRR threshold gate.
 
 | 리스크 | 영향 | 완화 |
 |--------|------|------|
-| 한국어 BM25 품질 | Sparse recall 저하 | Nori + 도메인 사용자 사전 |
+| 한국어 FTS 품질 | Sparse recall 저하 | Kiwi 형태소 + 도메인 사용자 사전 |
 | Reranker latency | p95 초과 | top-k 축소, GPU/ONNX, async endpoint |
-| OpenSearch SPOF | 검색 불가 | replica ≥ 1, snapshot backup |
+| PostgreSQL 검색 부하 | 쿼리 지연 | HNSW/GIN 튜닝, read replica, connection pool |
 | LLM 비용 | 운영 비용 증가 | retrieve-only endpoint, context budget |
 | 모델 cold start | 첫 요청 지연 | model cache volume, warm-up job |
 | Ingest 분리 시 메타 누락 | citation 출처·tenant 필터 실패 | [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md) 계약 + integration test |
@@ -447,6 +439,6 @@ CI에서 Recall@5, MRR threshold gate.
 ## 12. 관련 문서
 
 - [README](../README.md) — Quick Start, API 레퍼런스
-- [SEARCH_BACKENDS.md](SEARCH_BACKENDS.md) — OpenSearch ↔ pgvector 전환
-- [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램
+- [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
+- [adr/](adr/) — Architecture Decision Records
 - [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md) — Ingest/RAG 분리·메타데이터 계약

@@ -6,11 +6,10 @@ from rag.retrieval.pipeline import RetrievalPipeline
 class QueryService:
     def __init__(
         self,
-        backend: str | None = None,
         retrieval: RetrievalPipeline | None = None,
         llm: LLMGenerator | None = None,
     ) -> None:
-        self.retrieval = retrieval or RetrievalPipeline(backend=backend)
+        self.retrieval = retrieval or RetrievalPipeline()
         self.llm = llm or LLMGenerator()
 
     async def query(

@@ -1,18 +1,22 @@
 # Ingest / RAG 경계 설계
 
-> **목적:** Ingest를 별도 프로젝트로 분리하고, 이 저장소는 **검색·생성(RAG) 전용**으로 운영할 때의 경계·계약·메타데이터 보존 방안을 정의한다.
+> **목적:** Ingest를 별도 프로젝트로 분리하고, 이 저장소는 **검색·생성(RAG) 전용**으로 운영할 때의 경계·계약·메타데이터 보존 방안을 정의한다.  
+> **전제:** ADR-0002에 따라 검색 스택은 **PostgreSQL pgvector + Kiwi FTS 단일 DB**만 사용한다 (OpenSearch 없음).
 
 ---
 
 ## 1. 결론 요약
 
-**Ingest 분리는 가능하고, 일반적인 패턴이다.**  
-다만 **메타데이터를 어디에, 어떤 스키마로 쓸지**를 ingest ↔ RAG 사이에 **명시적 계약**으로 고정하지 않으면, 걱정하신 **파일 메타데이터 유실·citation 품질 저하**가 실제로 발생할 수 있다.
+**Ingest 분리는 가능하다.** pgvector 단일 스택에서는 검색·citation이 **항상 PostgreSQL `documents` + `chunks` JOIN**에 의존하므로, 외부 ingest는 **공유 PostgreSQL에 동일 스키마로 기록**하는 것이 필수다.
 
-| 백엔드 | 검색 시 메타데이터 출처 | Ingest 분리 시 필수 조건 |
-|--------|------------------------|--------------------------|
-| `opensearch` | 인덱스 문서에 **비정규화** (`source`, `filename`, `page` 등) | 청크 인덱싱 시 citation 필드를 **인덱스에 반드시 포함** |
-| `pgvector` | `chunks` + **`documents` JOIN** | ingest가 **공유 PostgreSQL**의 `documents`/`chunks`를 **동일 스키마**로 기록 |
+| 역할 | 담당 |
+|------|------|
+| **Ingest 프로젝트** | 업로드, 파싱, chunking, BGE-M3 embedding, Kiwi morph, PG 적재, 원본(S3) 보관 |
+| **RAG 프로젝트 (본 저장소)** | hybrid retrieve, rerank, LLM generate, citation |
+
+**메타데이터 유실 방지:** ingest가 `documents` 행과 `chunks` 검색 컬럼(`embedding`, `content_morph`, `tsv`)을 빠짐없이 채워야 citation·tenant 필터·검색이 동작한다.
+
+**중간 포맷:** 외부 ingest는 원본(PDF/DOCX/PPTX 등)을 **[MarkItDown](https://github.com/microsoft/markitdown)으로 Markdown 변환한 뒤** chunking하는 것을 **표준 파이프라인**으로 고정한다. RAG는 변환된 Markdown을 직접 받지 않고, ingest가 적재한 PostgreSQL만 읽는다.
 
 ---
 
@@ -22,97 +26,217 @@
 
 | 필드 | 용도 |
 |------|------|
-| `id` | doc_id — citation, 삭제, tenant 필터의 기준키 |
+| `id` | doc_id — citation, 삭제, tenant 필터 기준키 |
 | `tenant_id` | 멀티테넌시 검색 필터 |
-| `filename` | citation 표시, 파서 선택(ingest 측) |
+| `filename` | citation 표시 |
 | `source` | citation 출처 식별자 (기본값: filename) |
-| `content_type` | MIME (현재 RAG query 경로에서는 미사용) |
-| `content_hash` | 중복·변경 감지 (ingest idempotency) |
+| `content_type` | MIME (ingest·운영용) |
+| `content_hash` | 중복·변경 감지 |
 | `s3_key` | 원본 파일 위치 (ingest·reindex 전용) |
-| `status` | `completed`만 pgvector 검색 대상 |
+| `status` | **`completed`만 검색 대상** |
 
 ### 2.2 PostgreSQL `chunks` (청크 단위)
 
 | 필드 | 검색/RAG 사용 |
 |------|----------------|
 | `id` | chunk_id (citation) |
-| `doc_id` | 문서 연결 |
+| `doc_id` | `documents` FK |
 | `tenant_id` | tenant 필터 (청크 레벨 복제) |
 | `content` | rerank, LLM context, snippet |
 | `page` | citation (PDF 등) |
-| `chunk_index`, `token_count` | 디버깅·운영 |
-| `embedding`, `tsv`, `content_morph` | pgvector dense/sparse (ingest 후 UPDATE) |
+| `chunk_index`, `token_count`, `content_hash` | 운영·디버깅 |
+| `embedding` | Dense kNN (vector 1024, HNSW) |
+| `content_morph` | Kiwi 형태소 분석 결과 |
+| `tsv` | Sparse FTS (`to_tsvector('simple', content_morph)`) |
 
-### 2.3 OpenSearch 인덱스 (청크 단위, 비정규화)
+ingest 2단계 적재 (현재 monolith와 동일):
 
-`build_index_document()`가 ingest 시점에 아래를 **인덱스 문서에 복사**한다.
+1. `chunks` INSERT — `content`, `page`, `tenant_id` 등
+2. `PgVectorBackend.bulk_index()` — `embedding`, `content_morph`, `tsv` UPDATE
 
-- `chunk_id`, `doc_id`, `tenant_id`
-- `content`, `embedding`
-- `source`, `filename`, `page` ← **citation에 직접 사용**
-- `chunk_index`, `token_count`, `content_hash`, `created_at`
-
-→ OpenSearch 모드에서는 **query 시 PostgreSQL을 조회하지 않는다.** 인덱스에 없으면 citation에서 빈 값이 된다.
-
-### 2.4 pgvector 검색 SQL
+### 2.3 RAG 검색 SQL (citation 메타 출처)
 
 ```sql
-SELECT c.id, c.doc_id, c.content, d.source, d.filename, c.page, ...
+SELECT
+    c.id::text AS chunk_id,
+    c.doc_id::text AS doc_id,
+    c.content,
+    d.source,
+    d.filename,
+    c.page,
+    ...
 FROM chunks c
 JOIN documents d ON c.doc_id = d.id
-WHERE d.status = 'completed'
+WHERE c.embedding IS NOT NULL
+  AND d.status = 'completed'
 ```
 
-→ **`documents` 행이 없거나 `status != completed`이면 검색·citation에서 제외**된다.
+→ **`documents`에 `source`/`filename`이 없거나 `status != completed`이면 검색·citation에서 제외**된다.
 
 ---
 
 ## 3. Ingest 분리 시 메타데이터가 유실되는 대표 시나리오
 
-| 시나리오 | 증상 | 영향 |
-|----------|------|------|
-| ingest가 OpenSearch만 쓰고 PG `documents` 미기록 | pgvector 전환·JOIN 실패 | pgvector 사용 불가, citation `source`/`filename` 누락 가능 |
-| ingest가 청크 텍스트만 적재, `source`/`filename`/`page` 누락 | citation에 출처 표시 불가 | **사용자가 걱정하는 핵심 리스크** |
-| ingest가 자체 doc_id/chunk_id 발급, RAG와 불일치 | 삭제·재색인·추적 불가 | 운영 장애 |
-| 확장 메타(부서, 작성일, 태그)를 ingest만 보유 | RAG에서 필터·표시 불가 | 검색 범위·UI 제약 (현재 스키마에도 JSON 메타 필드 없음) |
-| ingest가 `tenant_id` 누락 | tenant 격리 검색 무력화 | 보안·데이터 혼선 |
+| 시나리오 | 증상 |
+|----------|------|
+| ingest가 `chunks.content`만 INSERT, `embedding`/`tsv` 미갱신 | dense/sparse 검색 결과 0건 |
+| `documents` 행 누락 | JOIN 실패 → 검색 불가 |
+| `documents.status`가 `completed`가 아님 | 검색 WHERE 조건에서 제외 |
+| `source`/`filename`/`page` 누락 | citation 출처 표시 불가 (**핵심 리스크**) |
+| Kiwi morph 생략 (`content_morph`, `tsv` 불일치) | 한국어 sparse recall 저하 |
+| ingest가 자체 doc_id/chunk_id 체계 사용 | RAG 삭제·추적 불일치 |
+| `tenant_id` 누락 | tenant 격리 검색 무력화 |
 
 ---
 
-## 4. 권장 아키텍처 패턴
+## 4. 권장 아키텍처
 
-### 패턴 A — 공유 PostgreSQL + 검색 인덱스 (권장)
+### 패턴 A — 공유 PostgreSQL (권장, 사실상 유일)
 
 ```
-[Ingest Service]                    [RAG Service]
-  parse/chunk/embed                   retrieve/rerank/LLM
-       │                                    │
-       ├─► PostgreSQL (documents, chunks) ◄─┤  pgvector: JOIN
-       └─► OpenSearch bulk index      ◄─────┘  opensearch: index read
+[Ingest Service]                         [RAG Service]
+  parse → chunk → embed → Kiwi morph       retrieve → rerank → LLM
+              │                                    │
+              └────► PostgreSQL (documents, chunks) ◄──┘
 ```
 
-- ingest: `documents`/`chunks` INSERT + embedding/tsv 또는 OpenSearch bulk
-- RAG: `POST /v1/retrieve`, `POST /v1/query`만 제공
-- **메타데이터 단일 원천:** PostgreSQL `documents`
-- OpenSearch 사용 시에도 ingest가 **동일 메타를 인덱스에 비정규화** (reindex·백엔드 전환 대비)
+- ingest와 RAG가 **동일 PostgreSQL** (또는 ingest write / RAG read replica) 사용
+- 별도 검색 엔진·dual-write **불필요**
+- citation 메타의 단일 원천: `documents` (`source`, `filename`) + `chunks` (`page`, `content`)
 
-### 패턴 B — 검색 인덱스 only (RAG stateless)
+### 패턴 B — 이벤트 기반
 
-- RAG는 OpenSearch(또는 전용 vector DB)만 읽음
-- pgvector 백엔드 **사용 불가** (또는 ingest가 PG에도 dual-write)
-- citation 필드를 **인덱스 mapping에 고정**하고 ingest contract로 검증
-
-### 패턴 C — 이벤트 기반 (Kafka/SQS)
-
-- ingest 완료 이벤트: `{ doc_id, chunk_id, content, embedding, metadata... }`
-- RAG(또는 indexer sidecar)가 이벤트를 소비해 인덱스 적재
-- **스키마 버전**(`schema_version`)을 이벤트에 포함해 하위 호환 관리
+- ingest 완료 이벤트 → indexer worker가 PG에 동일 스키마로 적재
+- 이벤트에 `schema_version` 포함 (하위 호환)
+- **최종 저장소는 여전히 PostgreSQL** — RAG는 PG만 읽음
 
 ---
 
-## 5. Ingest → RAG 메타데이터 계약 (필수 필드)
+## 5. MarkItDown 중간 포맷 (표준)
 
-외부 ingest가 **청크 1건**을 적재할 때 RAG citation·필터에 필요한 최소 필드:
+### 5.1 왜 Markdown으로 고정하는가
+
+| 이점 | 설명 |
+|------|------|
+| **단일 파싱 경로** | ingest 내부에서 PDF/DOCX/PPTX/HTML 등 → MarkItDown → `.md` 한 경로 |
+| **LLM/RAG 친화** | 제목·목록·표 구조 유지 → Semantic Chunker 경계 품질 향상 |
+| **RAG 단순화** | 본 저장소는 PyMuPDF/BeautifulSoup 등 **포맷 파서 불필요** |
+| **포맷 확장** | MarkItDown `[all]` extras로 Office·이미지(OCR) 등 ingest 측에서 흡수 |
+
+MarkItDown은 **고품질 인쇄용 변환**이 아니라 **텍스트 분석·LLM ingest용** 도구임을 전제로 한다.
+
+### 5.2 ingest 파이프라인 (고정)
+
+```
+원본 파일 (any)
+  → MarkItDown.convert*()
+  → Markdown 텍스트 (+ 선택: S3에 {doc_id}.md 저장)
+  → Semantic Chunker (헤딩 `#`/`##` 경계 우선)
+  → BGE-M3 embed + Kiwi morph
+  → PostgreSQL documents/chunks
+```
+
+`*` MarkItDown API: 로컬 파일은 `convert_local()`, URL은 `convert()` / `convert_stream()` 등 입력 유형에 맞는 메서드 사용.
+
+RAG 계약 경계는 **PostgreSQL**이다. Markdown 파일/API로 RAG에 직접 넘기지 않는다.
+
+### 5.3 `documents` 메타데이터 규칙 (원본 vs 변환본)
+
+| 필드 | 값 | 비고 |
+|------|-----|------|
+| `filename` | **원본** 파일명 (`세무조사.pdf`) | citation UI용 |
+| `source` | 논리적 출처 경로 | 변경 없음 |
+| `content_type` | **원본** MIME (`application/pdf`) | 변환본 MIME 아님 |
+| `content_hash` | **원본** 바이트 SHA256 | 중복 업로드 감지 |
+| `s3_key` | 원본 객체 키 | 감사·재처리 |
+| (선택) `extra_metadata.converted_s3_key` | `{doc_id}.md` | re-chunk·디버깅용 |
+
+변환본 Markdown hash는 `extra_metadata.markdown_hash` 등으로 **선택** 기록 (re-chunk 트리거용).
+
+### 5.4 page(citation) 보존 — **필수 설계 결정**
+
+MarkItDown 기본 출력은 **단일 Markdown 스트림**이라 PDF **페이지 번호가 사라질 수 있다.**
+
+| 전략 | `chunks.page` | 권장 |
+|------|---------------|------|
+| A. page 포기 | `null` | MD/일반 문서, page citation 불필요 시 |
+| B. ingest가 페이지 마커 주입 | MarkItDown 전후 또는 PDF 페이지별 convert 후 `<!-- page: N -->` 삽입 → chunker가 파싱 | **PDF citation 필요 시 권장** |
+| C. Azure Document Intelligence (`[az-doc-intel]`) | bbox/page 메타 확보 | 스캔 PDF·복잡 레이아웃 |
+
+**계약:** PDF 등 page citation이 필요한 tenant/문서유형은 ingest가 **B 또는 C**를 적용하고, 불가 시 `page: null`을 명시적으로 허용한다.
+
+### 5.5 Chunking 규칙 (Markdown 입력)
+
+- `#` / `##` / `###` 헤딩 경계 **우선** 분할 (현재 SemanticChunker 문단 경계와 병행)
+- 표(table)는 **가능한 한 하나의 chunk에 유지** (행 단위 분할 지양)
+- 코드블록·목록은 overlap(`overlap_tokens`)으로 경계 recall 보완
+
+### 5.6 MarkItDown 운영 주의
+
+| 항목 | 내용 |
+|------|------|
+| 의존성 | `pip install 'markitdown[all]'` 또는 포맷별 extras (`[pdf]`, `[docx]` …) |
+| 품질 | 스캔 PDF·한글 복잡 레이아웃 → golden set으로 ingest 품질 gate |
+| OCR/이미지 | MarkItDown LLM 연동 시 **ingest 측** 비용·지연 — RAG와 분리 |
+| 버전 고정 | ingest `markitdown==x.y.z` pin → 변환 결과 drift 방지 |
+
+### 5.7 품질 검증 (ingest 책임)
+
+- 원본 → MD → chunk 샘플을 ingest golden set에 저장
+- RAG `/v1/retrieve` Recall@5는 **최종 chunk 품질**을 반영 — MD 변환 품질 저하는 ingest CI에서 먼저 걸러야 함
+
+---
+
+## 6. Ingest → PostgreSQL 계약
+
+### 6.1 문서 (`documents`)
+
+```json
+{
+  "doc_id": "uuid",
+  "tenant_id": "team-a",
+  "filename": "세무조사.pdf",
+  "source": "업무지침/2024/세무조사.pdf",
+  "content_type": "application/pdf",
+  "content_hash": "sha256...",
+  "s3_key": "documents/{doc_id}/세무조사.pdf",
+  "status": "completed",
+  "chunk_count": 42
+}
+```
+
+`source`가 없으면 ingest에서 `filename`으로 fallback (현재 monolith와 동일).
+
+### 6.2 청크 (`chunks`) — 1단계 INSERT
+
+```json
+{
+  "chunk_id": "uuid",
+  "doc_id": "uuid",
+  "tenant_id": "team-a",
+  "chunk_index": 0,
+  "content": "청크 본문",
+  "token_count": 412,
+  "page": 3,
+  "content_hash": "sha256..."
+}
+```
+
+### 6.3 청크 — 2단계 검색 컬럼 UPDATE (ingest 필수)
+
+ingest는 `PgVectorBackend.bulk_index()`와 동등하게 아래를 수행해야 한다:
+
+| 컬럼 | 값 |
+|------|-----|
+| `embedding` | BGE-M3 1024-dim vector |
+| `content_morph` | Kiwi 형태소 분석(`kiwipiepy`) 결과 |
+| `tsv` | `to_tsvector('simple', content_morph)` |
+
+**embedding 모델·차원·Kiwi analyzer는 RAG와 ingest가 동일해야 한다** (ADR-0003: `BAAI/bge-m3`).
+
+### 6.4 `build_index_document()` 페이로드 (monolith 호환)
+
+ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 
 ```json
 {
@@ -130,101 +254,86 @@ WHERE d.status = 'completed'
 }
 ```
 
-**문서 단위 (PostgreSQL `documents` — pgvector 또는 운영 조회용):**
-
-```json
-{
-  "doc_id": "uuid",
-  "tenant_id": "team-a",
-  "filename": "세무조사.pdf",
-  "source": "업무지침/2024/세무조사.pdf",
-  "content_type": "application/pdf",
-  "content_hash": "sha256...",
-  "status": "completed",
-  "chunk_count": 42
-}
-```
-
-### 확장 메타데이터 (선택, Phase 2+)
-
-도메인별 메타(부서, 문서유형, effective_date 등)가 필요하면:
-
-1. **`documents.extra_metadata` JSONB** (단일 원천, ingest가 기록)
-2. 검색 필터가 필요한 키만 **인덱스 필드로 승격** (OpenSearch keyword / PG generated column)
-3. citation UI용 필드는 retrieve 응답에 **pass-through** (RAG가 해석하지 않고 전달)
-
-→ 스키마 migration 전까지는 ingest contract 문서에 **allowed keys** 목록을 명시한다.
+`source`/`filename`은 `documents`에도 기록하고, `bulk_index` 시 `content_morph`/`tsv`/`embedding`만 UPDATE한다.
 
 ---
 
-## 6. 이 프로젝트(RAG)에서 제거·유지할 범위
+## 7. 이 프로젝트(RAG)에서 제거·유지할 범위
 
 ### Ingest 프로젝트로 이전
 
 | 컴포넌트 | 경로 |
 |----------|------|
 | Upload API | `POST /v1/documents` |
-| Celery ingest/delete worker | `workers/celery_app.py`, ingest tasks |
+| Celery ingest/delete worker | `workers/celery_app.py` |
 | Parser / Chunker | `ingestion/parsers.py`, `chunker.py`, `pipeline.py` |
-| S3 upload (원본 보관) | ingest 측 Object Storage |
+| S3 upload | ingest 측 Object Storage |
 | IngestJob 상태 관리 | ingest 측 queue/DB |
+| Kiwi morph + embedding write | ingest 측 (RAG는 query embedding만) |
 
 ### RAG 프로젝트에 유지
 
 | 컴포넌트 | 이유 |
 |----------|------|
 | `POST /v1/retrieve`, `POST /v1/query` | 핵심 |
+| `PgVectorBackend` (kNN + FTS read) | 검색 |
 | RetrievalPipeline, Rerank, LLM | 핵심 |
-| SearchBackend (OpenSearch / pgvector) | 검색 |
-| `documents`/`chunks` **읽기** (pgvector, 운영) | JOIN·상태 확인 |
+| `documents`/`chunks` **읽기** | JOIN·citation |
 | `GET /health`, `GET /ready`, metrics | 운영 |
 
 ### 선택적 유지
 
-- `GET /v1/documents/{id}` — ingest 상태 조회 API가 별도면 RAG에서 deprecate 가능
-- `DELETE /v1/documents/{id}` — ingest가 tombstone + 인덱스 삭제를 담당하면 RAG에서 제거
+- `GET /v1/documents/{id}` — ingest가 상태 API를 제공하면 RAG에서 deprecate
+- `DELETE /v1/documents/{id}` — ingest가 tombstone + `embedding`/`tsv` NULL 처리 담당
 
 ---
 
-## 7. 백엔드별 체크리스트
+## 8. Ingest 분리 체크리스트
 
-### OpenSearch-only RAG
-
-- [ ] ingest contract: citation 필드 5종 (`chunk_id`, `doc_id`, `source`, `filename`, `page`) 인덱스 포함
-- [ ] tenant_id 인덱스 필드 + RAG `tenant_id` 필터 동작 확인
-- [ ] 문서 삭제 시 ingest가 `delete_by_doc_id` 호출 또는 동등 API
-
-### pgvector RAG
-
-- [ ] ingest가 **동일 PostgreSQL**에 `documents` + `chunks` 기록
-- [ ] `documents.status = completed` 후 embedding/tsv UPDATE
-- [ ] chunk_id는 ingest가 생성하거나, RAG가 기대하는 UUID 형식 준수
-
-### Dual backend A/B
-
-- [ ] ingest가 **OpenSearch bulk + PG chunks embedding** dual-write (현재 monolith ingest와 동일)
-- [ ] `SEARCH_BACKEND` 전환 시 reindex 주체 명확화 (ingest vs RAG admin job)
+- [ ] ingest와 RAG **동일 PostgreSQL** (스키마·migration 공유 또는 ingest가 migration 소유)
+- [ ] `documents.status = completed` **후** chunk embedding/tsv UPDATE
+- [ ] chunk INSERT → commit → embedding UPDATE 순서 (monolith와 동일)
+- [ ] citation 5종 non-empty: `chunk_id`, `doc_id`, `source`, `filename`, `page`(nullable)
+- [ ] `tenant_id` 문서·청크 양쪽 기록
+- [ ] 삭제: `documents.status = deleted` + `chunks.embedding/content_morph/tsv = NULL`
+- [ ] MarkItDown 변환 + Markdown chunking 파이프라인 golden set CI
+- [ ] PDF page citation 필요 시 page 마커 또는 Doc Intelligence 적용
+- [ ] integration test: ingest golden doc → RAG `/v1/retrieve` → citation 필드 assert
 
 ---
 
-## 8. FAQ
+## 9. 확장 메타데이터 (Phase 2+)
 
-**Q. RAG만 두면 S3 원본이 없어도 되나?**  
-A. query/retrieve만 제공하면 **런타임에 S3 불필요**. reindex·감사 추적은 ingest 측 책임.
+부서, 문서유형, effective_date 등 도메인 메타가 필요하면:
 
-**Q. filename만 있고 source가 없으면?**  
-A. ingest에서 `source = filename` fallback (현재 monolith와 동일). 둘 다 없으면 citation 품질 저하.
-
-**Q. page가 없는 MD/TXT는?**  
-A. `page: null` 허용. citation에서 page 생략.
-
-**Q. 메타데이터 유실을 CI에서 막으려면?**  
-A. ingest integration test: golden doc ingest → RAG `/v1/retrieve` → citation 필드 non-empty assert.
+1. `documents.extra_metadata JSONB` (ingest가 기록, RAG는 pass-through)
+2. 검색 필터용 키만 PG generated column 또는 partial index로 승격
+3. contract 문서에 allowed keys 목록 명시
 
 ---
 
-## 9. 관련 문서
+## 10. FAQ
+
+**Q. MarkItDown 변환 Markdown을 RAG API로 직접 넘겨도 되나?**  
+A. **비권장.** RAG 계약 경계는 PostgreSQL이다. ingest 내부에서 MD → chunk → PG 적재 후 RAG는 PG만 읽는다.
+
+**Q. RAG-only면 S3 원본이 필요한가?**  
+A. query/retrieve 런타임에는 **불필요**. reindex·감사는 ingest 책임.
+
+**Q. ingest만 PG 쓰고 RAG는 API로 chunks를 받을 수 있나?**  
+A. 현재 RAG는 PG 직접 read. 별도 API 레이어를 두려면 retrieval pipeline 전면 교체 필요 — **비권장**.
+
+**Q. OpenSearch dual-write는?**  
+A. ADR-0002로 **제거됨**. re-ingest 없이 OS → PG 마이그레이션 경로 없음.
+
+**Q. page 없는 MD/TXT는?**  
+A. `page: null` 허용.
+
+---
+
+## 11. 관련 문서
 
 - [RAG_PLANNING.md](./RAG_PLANNING.md) — 목표·API·로드맵
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — 컴포넌트·데이터 흐름
-- [SEARCH_BACKENDS.md](./SEARCH_BACKENDS.md) — 백엔드 전환
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — 컴포넌트·chunks 스키마
+- [adr/0001-postgresql-pgvector-kiwi-hybrid-search.md](./adr/0001-postgresql-pgvector-kiwi-hybrid-search.md)
+- [adr/0002-remove-opensearch-single-db-stack.md](./adr/0002-remove-opensearch-single-db-stack.md)
