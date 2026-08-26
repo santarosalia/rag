@@ -28,8 +28,7 @@
 |------|------|
 | `id` | doc_id — citation, 삭제, tenant 필터 기준키 |
 | `tenant_id` | 멀티테넌시 검색 필터 |
-| `filename` | citation 표시 |
-| `source` | citation 출처 식별자 (기본값: filename) |
+| `filename` | citation 표시 (원본 파일명 또는 논리 경로) |
 | `content_type` | MIME (ingest·운영용) |
 | `content_hash` | 중복·변경 감지 |
 | `s3_key` | 원본 파일 위치 (ingest·reindex 전용) |
@@ -61,7 +60,6 @@ SELECT
     c.id::text AS chunk_id,
     c.doc_id::text AS doc_id,
     c.content,
-    d.source,
     d.filename,
     c.page,
     ...
@@ -71,7 +69,7 @@ WHERE c.embedding IS NOT NULL
   AND d.status = 'completed'
 ```
 
-→ **`documents`에 `source`/`filename`이 없거나 `status != completed`이면 검색·citation에서 제외**된다.
+→ **`documents`에 `filename`이 없거나 `status != completed`이면 검색·citation에서 제외**된다.
 
 ---
 
@@ -82,7 +80,7 @@ WHERE c.embedding IS NOT NULL
 | ingest가 `chunks.content`만 INSERT, `embedding`/`tsv` 미갱신 | dense/sparse 검색 결과 0건 |
 | `documents` 행 누락 | JOIN 실패 → 검색 불가 |
 | `documents.status`가 `completed`가 아님 | 검색 WHERE 조건에서 제외 |
-| `source`/`filename`/`page` 누락 | citation 출처 표시 불가 (**핵심 리스크**) |
+| `filename`/`page` 누락 | citation 출처 표시 불가 (**핵심 리스크**) |
 | Kiwi morph 생략 (`content_morph`, `tsv` 불일치) | 한국어 sparse recall 저하 |
 | ingest가 자체 doc_id/chunk_id 체계 사용 | RAG 삭제·추적 불일치 |
 | `tenant_id` 누락 | tenant 격리 검색 무력화 |
@@ -102,7 +100,7 @@ WHERE c.embedding IS NOT NULL
 
 - ingest와 RAG가 **동일 PostgreSQL** (또는 ingest write / RAG read replica) 사용
 - 별도 검색 엔진·dual-write **불필요**
-- citation 메타의 단일 원천: `documents` (`source`, `filename`) + `chunks` (`page`, `content`)
+- citation 메타의 단일 원천: `documents.filename` + `chunks.page`, `chunks.content`
 
 ### 패턴 B — 이벤트 기반
 
@@ -144,8 +142,7 @@ RAG 계약 경계는 **PostgreSQL**이다. Markdown 파일/API로 RAG에 직접 
 
 | 필드 | 값 | 비고 |
 |------|-----|------|
-| `filename` | **원본** 파일명 (`세무조사.pdf`) | citation UI용 |
-| `source` | 논리적 출처 경로 | 변경 없음 |
+| `filename` | **원본** 파일명 또는 논리 경로 (`세무조사.pdf`, `업무지침/2024/세무.pdf`) | citation UI용 |
 | `content_type` | **원본** MIME (`application/pdf`) | 변환본 MIME 아님 |
 | `content_hash` | **원본** 바이트 SHA256 | 중복 업로드 감지 |
 | `s3_key` | 원본 객체 키 | 감사·재처리 |
@@ -195,8 +192,7 @@ MarkItDown 기본 출력은 **단일 Markdown 스트림**이라 PDF **페이지 
 {
   "doc_id": "uuid",
   "tenant_id": "team-a",
-  "filename": "세무조사.pdf",
-  "source": "업무지침/2024/세무조사.pdf",
+  "filename": "업무지침/2024/세무조사.pdf",
   "content_type": "application/pdf",
   "content_hash": "sha256...",
   "s3_key": "documents/{doc_id}/세무조사.pdf",
@@ -205,7 +201,7 @@ MarkItDown 기본 출력은 **단일 Markdown 스트림**이라 PDF **페이지 
 }
 ```
 
-`source`가 없으면 ingest에서 `filename`으로 fallback (현재 monolith와 동일).
+논리 경로가 필요하면 **`filename`에 전체 경로**를 넣거나 `extra_metadata.canonical_path`를 사용한다.
 
 ### 6.2 청크 (`chunks`) — 1단계 INSERT
 
@@ -245,8 +241,7 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
   "tenant_id": "team-a",
   "content": "청크 본문",
   "embedding": [0.1, "..."],
-  "source": "업무지침/2024/세무조사.pdf",
-  "filename": "세무조사.pdf",
+  "filename": "업무지침/2024/세무조사.pdf",
   "page": 3,
   "chunk_index": 0,
   "token_count": 412,
@@ -254,7 +249,7 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 }
 ```
 
-`source`/`filename`은 `documents`에도 기록하고, `bulk_index` 시 `content_morph`/`tsv`/`embedding`만 UPDATE한다.
+`filename`은 `documents`에도 기록하고, `bulk_index` 시 `content_morph`/`tsv`/`embedding`만 UPDATE한다.
 
 ---
 
@@ -293,7 +288,7 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 - [ ] ingest와 RAG **동일 PostgreSQL** (스키마·migration 공유 또는 ingest가 migration 소유)
 - [ ] `documents.status = completed` **후** chunk embedding/tsv UPDATE
 - [ ] chunk INSERT → commit → embedding UPDATE 순서 (monolith와 동일)
-- [ ] citation 5종 non-empty: `chunk_id`, `doc_id`, `source`, `filename`, `page`(nullable)
+- [ ] citation 필수: `chunk_id`, `doc_id`, `filename`, `page`(nullable)
 - [ ] `tenant_id` 문서·청크 양쪽 기록
 - [ ] 삭제: `documents.status = deleted` + `chunks.embedding/content_morph/tsv = NULL`
 - [ ] MarkItDown 변환 + Markdown chunking 파이프라인 golden set CI
