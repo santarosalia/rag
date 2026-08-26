@@ -29,16 +29,6 @@ llm:
     If the context does not contain enough information, say so clearly.
     Answer in the same language as the question.
 
-opensearch:
-  index_alias: "rag-chunks"
-  index_prefix: "rag-chunks-v"
-  number_of_shards: 1
-  number_of_replicas: 0
-  knn:
-    ef_search: 100
-    m: 16
-    ef_construction: 128
-
 cache:
   query_embedding_ttl_seconds: 3600
 
@@ -50,4 +40,4 @@ rate_limit:
   requests_per_minute: 60
 
 search:
-  backend: opensearch  # opensearch | pgvector
+  sparse_analyzer: kiwi  # Kiwi morphological analyzer for Korean FTS

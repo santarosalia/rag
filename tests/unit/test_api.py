@@ -49,27 +49,25 @@ async def test_retrieve_with_api_key(app, monkeypatch):
             {"total_ms": 10.0},
         )
 
-    monkeypatch.setattr("rag.api.routes.RetrievalPipeline.retrieve", mock_retrieve)
-
     class MockPipeline:
-        backend_name = "opensearch"
+        backend_name = "pgvector"
 
         retrieve = mock_retrieve
 
     monkeypatch.setattr(
         "rag.api.routes.RetrievalPipeline",
-        lambda backend=None, **kw: MockPipeline(),
+        lambda **kw: MockPipeline(),
     )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/v1/retrieve",
-            json={"query": "test query", "mode": "hybrid", "backend": "pgvector"},
+            json={"query": "test query", "mode": "hybrid"},
             headers={"X-API-Key": "dev-api-key-change-me"},
         )
         assert response.status_code == 200
         data = response.json()
         assert data["mode"] == SearchMode.HYBRID
-        assert data["backend"] == "opensearch"
+        assert data["backend"] == "pgvector"
         assert len(data["citations"]) == 1

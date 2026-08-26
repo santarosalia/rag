@@ -9,15 +9,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      OPENSEARCH_URL: http://opensearch:9200
       S3_ENDPOINT: http://minio:9000
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-      opensearch:
-        condition: service_healthy
       minio:
         condition: service_started
     volumes:
@@ -32,15 +29,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      OPENSEARCH_URL: http://opensearch:9200
       S3_ENDPOINT: http://minio:9000
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-      opensearch:
-        condition: service_healthy
       minio:
         condition: service_started
     volumes:
@@ -70,27 +64,6 @@ services:
     volumes:
       - redis_data:/data
 
-  opensearch:
-    image: opensearchproject/opensearch:2.17.1
-    environment:
-      discovery.type: single-node
-      plugins.security.disabled: "true"
-      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
-      bootstrap.memory_lock: "true"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    ports:
-      - "9200:9200"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -118,6 +91,5 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  opensearch_data:
   minio_data:
   model_cache:

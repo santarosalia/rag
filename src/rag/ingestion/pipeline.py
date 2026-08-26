@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag.config import get_settings
 from rag.db.models import Chunk, Document, DocumentStatus, IngestJob, JobStatus
+from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
-from rag.indexing.opensearch_client import build_index_document
 from rag.ingestion.chunker import SemanticChunker
 from rag.ingestion.parsers import get_parser
 from rag.observability.logging import get_logger

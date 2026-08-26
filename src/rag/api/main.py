@@ -25,12 +25,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(settings.log_level)
     setup_tracing("rag-api")
-    logger.info(
-        "starting_rag_api",
-        version=__version__,
-        env=settings.app_env,
-        search_backend=settings.search_backend,
-    )
+    logger.info("starting_rag_api", version=__version__, env=settings.app_env)
 
     search_backend = get_search_backend()
     try:
@@ -51,7 +46,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Hybrid RAG API",
-        description="Production-grade RAG with dense, sparse, and rerank",
+        description="Production-grade RAG with pgvector + FTS hybrid search",
         version=__version__,
         lifespan=lifespan,
     )
@@ -91,12 +86,11 @@ def create_app() -> FastAPI:
             search_backend = get_search_backend()
             ok = await search_backend.ping()
             await search_backend.close()
-            key = f"search_{search_backend.name}"
-            checks[key] = "ok" if ok else "error: ping failed"
+            checks["search_pgvector"] = "ok" if ok else "error: ping failed"
         except Exception as e:
-            checks[f"search_{settings.search_backend}"] = f"error: {e}"
+            checks["search_pgvector"] = f"error: {e}"
 
-        required = {"postgres", "redis", f"search_{settings.search_backend}"}
+        required = {"postgres", "redis", "search_pgvector"}
         all_ok = all(checks.get(k) == "ok" for k in required)
         return ReadyResponse(
             status="ready" if all_ok else "not_ready",

@@ -3,7 +3,7 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class SearchBackend(Protocol):
-    """Abstract search/index backend (OpenSearch or PostgreSQL pgvector+FTS)."""
+    """Search/index backend backed by PostgreSQL pgvector + FTS."""
 
     @property
     def name(self) -> str: ...
