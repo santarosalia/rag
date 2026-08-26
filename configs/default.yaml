@@ -54,3 +54,4 @@ rate_limit:
 
 search:
   backend: pgvector # opensearch | pgvector
+  # backend: opensearch # opensearch | pgvector
