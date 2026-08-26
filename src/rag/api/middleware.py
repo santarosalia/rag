@@ -19,9 +19,8 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if request.url.path in self.EXEMPT_PATHS:
             return await call_next(request)
 
-        settings = get_settings()
         # api_key = request.headers.get("X-API-Key")
-        # if not api_key or api_key != settings.api_key:
+        # if not api_key or api_key != get_settings().api_key:
         #     return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
 
         return await call_next(request)
