@@ -1,4 +1,3 @@
-
 from rag.indexing.factory import get_search_backend
 
 

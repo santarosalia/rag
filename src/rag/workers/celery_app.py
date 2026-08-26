@@ -3,6 +3,7 @@ import uuid
 from datetime import UTC, datetime
 
 from celery import Celery
+from celery.signals import worker_process_init
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -47,13 +48,20 @@ def run_async(coro):
     return asyncio.run(coro)
 
 
+@worker_process_init.connect
+def _dispose_inherited_engine(**_kwargs) -> None:
+    from rag.db.session import engine as async_engine
+
+    async_engine.sync_engine.dispose()
+
+
 @celery_app.task(bind=True, name="rag.ingest_document", max_retries=3)
 def ingest_document_task(self, doc_id: str, job_id: str) -> dict:
-    from rag.db.session import AsyncSessionLocal
+    from rag.db.session import worker_session
     from rag.ingestion.pipeline import IngestionPipeline
 
     async def _ingest():
-        async with AsyncSessionLocal() as session:
+        async with worker_session() as session:
             job_result = await session.execute(
                 select(IngestJob).where(IngestJob.id == uuid.UUID(job_id))
             )
@@ -76,6 +84,8 @@ def ingest_document_task(self, doc_id: str, job_id: str) -> dict:
                     job.error_message = str(e)
                 await session.commit()
                 raise
+            finally:
+                await pipeline.search_backend.close()
 
     try:
         return run_async(_ingest())

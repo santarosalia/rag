@@ -70,7 +70,7 @@ class PgVectorBackend:
                     embedding = doc["embedding"]
                     embedding_literal = "[" + ",".join(str(v) for v in embedding) + "]"
 
-                    await session.execute(
+                    result = await session.execute(
                         text(
                             """
                             UPDATE chunks
@@ -86,6 +86,8 @@ class PgVectorBackend:
                             "embedding": embedding_literal,
                         },
                     )
+                    if result.rowcount == 0:
+                        raise RuntimeError(f"chunk {chunk_id} not found for embedding update")
                     success += 1
                 except Exception as e:
                     errors += 1

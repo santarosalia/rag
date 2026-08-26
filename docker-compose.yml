@@ -2,7 +2,7 @@ services:
   api:
     build: .
     ports:
-      - "8000:8000"
+      - "7500:8000"
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/rag
@@ -17,6 +17,13 @@ services:
         condition: service_started
       minio:
         condition: service_started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
       - model_cache:/root/.cache/huggingface
     command: uvicorn rag.api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -30,6 +37,13 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       S3_ENDPOINT: http://minio:9000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,7 +86,7 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
       - "9000:9000"
-      - "9001:9001"
+      - "9090:9001"
     volumes:
       - minio_data:/data
 

@@ -25,7 +25,12 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(settings.log_level)
     setup_tracing("rag-api")
-    logger.info("starting_rag_api", version=__version__, env=settings.app_env)
+    logger.info(
+        "starting_rag_api",
+        version=__version__,
+        env=settings.app_env,
+        search_backend="pgvector",
+    )
 
     search_backend = get_search_backend()
     try:
