@@ -45,7 +45,6 @@ class Settings(BaseSettings):
         return load_yaml_config(self.config_path)
 
 
-@lru_cache
 def load_yaml_config(path: Path) -> dict[str, Any]:
     config_path = Path(path)
     if not config_path.exists():

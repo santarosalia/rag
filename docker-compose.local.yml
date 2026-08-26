@@ -32,3 +32,4 @@ services:
       - python
       - celery -A rag.workers.celery_app worker --loglevel=info --concurrency=2
       - /app/src
+      - /app/configs

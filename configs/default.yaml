@@ -16,7 +16,7 @@ models:
   reranker: "BAAI/bge-reranker-v2-m3"
   embedding_dimension: 1024
   reranker_batch_size: 16
-  device: "cpu"
+  device: "cuda"
 
 llm:
   provider: "vllm"
@@ -53,4 +53,4 @@ rate_limit:
   requests_per_minute: 60
 
 search:
-  backend: opensearch # opensearch | pgvector
+  backend: pgvector # opensearch | pgvector

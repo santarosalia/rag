@@ -1,0 +1,3 @@
+# NVIDIA driver 570.x supports CUDA 12.8, not 13.0.
+# PyPI's default torch wheel is cu130; pin the cu128 build instead.
+torch==2.11.0+cu128

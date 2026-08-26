@@ -104,6 +104,8 @@ class IngestionPipeline:
 
             session.add_all(db_chunks)
             await session.flush()
+            # pgvector bulk_index UPDATEs in a separate session; rows must be committed first.
+            await session.commit()
             await self.search_backend.ensure_index()
 
             for i in range(0, len(index_docs), self.batch_size):
@@ -122,6 +124,7 @@ class IngestionPipeline:
                 "document_ingested",
                 doc_id=str(doc_id),
                 chunk_count=len(db_chunks),
+                backend=self.search_backend.name,
             )
             return len(db_chunks)
 

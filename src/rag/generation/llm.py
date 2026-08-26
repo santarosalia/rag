@@ -45,7 +45,10 @@ class LLMGenerator:
         self.extra_body = llm_cfg.get("extra_body") or {}
 
     async def generate(self, query: str, context: str) -> str:
-        if not self.api_key:
+        # OpenAI-compatible servers (vLLM, etc.) accept any/empty key; skip only
+        # when neither a key nor a non-default endpoint is configured.
+        api_key = self.api_key or "EMPTY"
+        if not self.api_key and self.base_url.rstrip("/") == "https://api.openai.com/v1":
             return self._fallback_answer(query, context)
 
         messages = [
@@ -62,7 +65,7 @@ class LLMGenerator:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={
-                        "Authorization": f"Bearer {self.api_key}",
+                        "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
                     },
                     json={
@@ -95,11 +98,11 @@ class LLMGenerator:
     def _fallback_answer(query: str, context: str) -> str:
         if not context.strip():
             return (
-                "LLM API key is not configured and no context was retrieved. "
-                "Please set LLM_API_KEY to enable generation."
+                "LLM generation is unavailable and no context was retrieved. "
+                "Check LLM_BASE_URL / LLM_API_KEY."
             )
         return (
             f"Based on the retrieved context, here is a summary for: {query}\n\n"
             f"{context}\n\n"
-            "(Note: Set LLM_API_KEY for full LLM-powered answers.)"
+            "(Note: LLM generation is unavailable. Check LLM_BASE_URL / LLM_API_KEY.)"
         )
