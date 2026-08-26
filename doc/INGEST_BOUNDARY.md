@@ -298,10 +298,11 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 - [ ] 삭제: `documents.status = deleted` + `chunks.embedding/content_morph/tsv = NULL`
 - [ ] MarkItDown 변환 + Markdown chunking 파이프라인 golden set CI
 - [ ] PDF page citation 필요 시 page 마커 또는 Doc Intelligence 적용
+- [ ] integration test: ingest golden doc → RAG `/v1/retrieve` → citation 필드 assert
 
 ---
 
-## 8. 확장 메타데이터 (Phase 2+)
+## 9. 확장 메타데이터 (Phase 2+)
 
 부서, 문서유형, effective_date 등 도메인 메타가 필요하면:
 
@@ -311,7 +312,10 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 
 ---
 
-## 9. FAQ
+## 10. FAQ
+
+**Q. MarkItDown 변환 Markdown을 RAG API로 직접 넘겨도 되나?**  
+A. **비권장.** RAG 계약 경계는 PostgreSQL이다. ingest 내부에서 MD → chunk → PG 적재 후 RAG는 PG만 읽는다.
 
 **Q. RAG-only면 S3 원본이 필요한가?**  
 A. query/retrieve 런타임에는 **불필요**. reindex·감사는 ingest 책임.
@@ -327,7 +331,7 @@ A. `page: null` 허용.
 
 ---
 
-## 10. 관련 문서
+## 11. 관련 문서
 
 - [RAG_PLANNING.md](./RAG_PLANNING.md) — 목표·API·로드맵
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — 컴포넌트·chunks 스키마
