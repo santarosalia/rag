@@ -12,7 +12,6 @@ metadata:
 data:
   APP_ENV: production
   LOG_LEVEL: INFO
-  OPENSEARCH_URL: http://opensearch:9200
   S3_ENDPOINT: http://minio:9000
   S3_BUCKET: rag-documents
   S3_REGION: us-east-1
@@ -154,62 +153,6 @@ spec:
 
 ---
 apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: opensearch
-  namespace: rag
-spec:
-  serviceName: opensearch
-  replicas: 3
-  selector:
-    matchLabels:
-      app: opensearch
-  template:
-    metadata:
-      labels:
-        app: opensearch
-    spec:
-      containers:
-        - name: opensearch
-          image: opensearchproject/opensearch:2.17.1
-          ports:
-            - containerPort: 9200
-          env:
-            - name: discovery.seed_hosts
-              value: "opensearch-0.opensearch,opensearch-1.opensearch,opensearch-2.opensearch"
-            - name: cluster.initial_master_nodes
-              value: "opensearch-0,opensearch-1,opensearch-2"
-            - name: plugins.security.disabled
-              value: "true"
-            - name: OPENSEARCH_JAVA_OPTS
-              value: "-Xms1g -Xmx1g"
-          volumeMounts:
-            - name: data
-              mountPath: /usr/share/opensearch/data
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 50Gi
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: opensearch
-  namespace: rag
-spec:
-  clusterIP: None
-  selector:
-    app: opensearch
-  ports:
-    - port: 9200
-
----
-apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
@@ -226,7 +169,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: pgvector/pgvector:pg16
           env:
             - name: POSTGRES_USER
               value: rag

@@ -20,11 +20,9 @@ logger = get_logger(__name__)
 class RetrievalPipeline:
     def __init__(
         self,
-        backend: str | None = None,
         embedding_cache: QueryEmbeddingCache | None = None,
     ) -> None:
-        self._backend_name = backend
-        self.search_backend = get_search_backend(backend)
+        self.search_backend = get_search_backend()
         self.embedding_service = get_embedding_service()
         self.reranker_service = get_reranker_service()
         self.embedding_cache = embedding_cache or get_embedding_cache()
@@ -32,7 +30,7 @@ class RetrievalPipeline:
 
     @property
     def backend_name(self) -> str:
-        return self._backend_name or self.search_backend.name
+        return self.search_backend.name
 
     async def retrieve(
         self,

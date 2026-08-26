@@ -9,15 +9,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      OPENSEARCH_URL: http://opensearch:9200
       S3_ENDPOINT: http://minio:9000
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-      opensearch:
-        condition: service_healthy
       minio:
         condition: service_started
     deploy:
@@ -39,7 +36,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      OPENSEARCH_URL: http://opensearch:9200
       S3_ENDPOINT: http://minio:9000
     deploy:
       resources:
@@ -53,8 +49,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-      opensearch:
-        condition: service_healthy
       minio:
         condition: service_started
     volumes:
@@ -84,47 +78,6 @@ services:
     volumes:
       - redis_data:/data
 
-  opensearch:
-    build:
-      context: ./docker
-      dockerfile: opensearch.Dockerfile
-    image: rag-opensearch:2.17.1-nori
-    environment:
-      discovery.type: single-node
-      DISABLE_SECURITY_PLUGIN: "true"
-      DISABLE_INSTALL_DEMO_CONFIG: "true"
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "RagDevAdmin_123!"
-      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
-      bootstrap.memory_lock: "true"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    ports:
-      - "9200:9200"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -sf http://localhost:9200/_cluster/health || exit 1",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-
-  opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:2.17.1
-    environment:
-      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
-      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
-    ports:
-      - "5601:5601"
-    depends_on:
-      opensearch:
-        condition: service_healthy
-
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -152,6 +105,5 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  opensearch_data:
   minio_data:
   model_cache:

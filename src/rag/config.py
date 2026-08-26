@@ -19,10 +19,6 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
-    opensearch_url: str = "http://localhost:9200"
-    opensearch_user: str = ""
-    opensearch_password: str = ""
-
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
@@ -36,7 +32,6 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     embedding_device: str = "cpu"
-    search_backend: str = "opensearch"
 
     config_path: Path = Field(default=Path("configs/default.yaml"))
 
@@ -45,6 +40,7 @@ class Settings(BaseSettings):
         return load_yaml_config(self.config_path)
 
 
+@lru_cache
 def load_yaml_config(path: Path) -> dict[str, Any]:
     config_path = Path(path)
     if not config_path.exists():

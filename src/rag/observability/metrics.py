@@ -25,9 +25,9 @@ QUERY_COUNTER = Counter(
     ["endpoint", "status"],
 )
 
-OPENSEARCH_ERRORS = Counter(
-    "rag_opensearch_errors_total",
-    "OpenSearch errors",
+SEARCH_ERRORS = Counter(
+    "rag_search_errors_total",
+    "Search/index errors",
     ["operation"],
 )
 
