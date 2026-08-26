@@ -41,7 +41,6 @@ router = APIRouter(prefix="/v1")
 async def upload_document(
     file: UploadFile = File(...),
     tenant_id: str | None = Form(default=None),
-    source: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
     if not file.filename:
@@ -61,7 +60,6 @@ async def upload_document(
         content_hash=content_hash,
         s3_key="pending",
         tenant_id=tenant_id,
-        source=source,
     )
 
     stored = storage.upload(data, file.filename, doc_id=document.id)
@@ -92,7 +90,6 @@ async def get_document(
     return DocumentResponse(
         doc_id=document.id,
         filename=document.filename,
-        source=document.source,
         content_type=document.content_type,
         status=DocumentStatus(document.status.value),
         chunk_count=document.chunk_count,

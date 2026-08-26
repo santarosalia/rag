@@ -134,8 +134,7 @@ Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
 |------|------|------|
 | id | UUID | 문서 ID |
 | tenant_id | string | 멀티테넌시 (optional) |
-| filename | string | 원본 파일명 |
-| source | string | 출처 식별자 |
+| filename | string | 원본 파일명 (citation 표시) |
 | content_hash | SHA256 | 중복/변경 감지 |
 | status | enum | pending → processing → completed / failed |
 | chunk_count | int | 인덱싱된 청크 수 |
@@ -263,7 +262,6 @@ score(chunk) = Σ  1 / (k + rank_i)
     {
       "chunk_id": "uuid",
       "doc_id": "uuid",
-      "source": "rag-guide.pdf",
       "filename": "rag-guide.pdf",
       "page": 3,
       "score": 0.92,

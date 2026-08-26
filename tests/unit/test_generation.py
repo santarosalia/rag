@@ -7,7 +7,6 @@ def test_build_context_respects_budget():
         Citation(
             chunk_id="1",
             doc_id="d1",
-            source="s1",
             filename="f1.txt",
             page=1,
             score=0.9,
@@ -17,7 +16,6 @@ def test_build_context_respects_budget():
         Citation(
             chunk_id="2",
             doc_id="d2",
-            source="s2",
             filename="f2.txt",
             page=2,
             score=0.8,
@@ -34,7 +32,6 @@ def test_build_context_numbering():
         Citation(
             chunk_id="1",
             doc_id="d1",
-            source="s1",
             filename="doc.pdf",
             page=3,
             score=0.9,
