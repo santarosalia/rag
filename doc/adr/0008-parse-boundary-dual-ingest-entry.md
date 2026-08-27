@@ -51,10 +51,10 @@
 ### 단점
 
 - 경로 A MarkItDown과 경로 B 외부 변환 품질이 달라질 수 있음 (golden set으로 맞춤)
-- `/parsed`는 아직 미구현. 경로 A도 현재는 PyMuPDF 등 자체 파서
+- `/parsed`는 아직 golden-set 통합 테스트가 없다. 경로 A는 MarkItDown, 경로 B는 Markdown 패스스루.
 
 ### 후속 조치
 
-- [ ] `ingestion/parsers.py` → MarkItDown
-- [ ] `POST /v1/documents/parsed`
+- [x] `ingestion/parsers.py` → MarkItDown
+- [x] `POST /v1/documents/parsed`
 - [ ] 두 경로 golden set + retrieve citation 테스트

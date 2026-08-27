@@ -14,7 +14,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 | **Rerank** | Cross-encoder `bge-reranker-v2-m3` (top-50 → top-5) |
 | **Citation** | chunk_id, filename, page, snippet 포함 |
 | **Group Tree** | 문서 소속 그룹 트리, 하위 포함 검색(`include_descendants`) |
-| **Async Ingest** | PDF / MD / HTML / TXT (Celery) |
+| **Async Ingest** | 원본(MarkItDown) 또는 파싱 Markdown → chunk/embed (Celery) |
 | **Single DB** | 메타데이터 + 벡터 + FTS 모두 PostgreSQL |
 | **Observability** | Prometheus, structlog, OpenTelemetry |
 
@@ -23,7 +23,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 ## 아키텍처
 
 ```
-Document Upload → Parser → Chunker → Embedding + Kiwi morph → PostgreSQL (pgvector + tsvector)
+Document Upload → MarkItDown (or parsed Markdown) → Chunker → Embedding + Kiwi morph → PostgreSQL (pgvector + tsvector)
                                                                     ↓
 Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citations
 ```
@@ -57,11 +57,17 @@ curl -X POST http://localhost:8000/v1/groups \
   -H "Content-Type: application/json" \
   -d '{"name": "default"}'
 
-# 업로드 (group_id 필수)
+# 업로드 (group_id 필수) — 경로 A
 curl -X POST http://localhost:8000/v1/documents \
   -H "X-API-Key: dev-api-key-change-me" \
   -F "file=@document.pdf" \
   -F "group_id=<GROUP_UUID>"
+
+# 파싱된 Markdown — 경로 B
+curl -X POST http://localhost:8000/v1/documents/parsed \
+  -H "X-API-Key: dev-api-key-change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"group_id": "<GROUP_UUID>", "filename": "document.pdf", "markdown": "# 제목\n\n본문"}'
 
 # 검색 (group_id 생략 시 전체, 하위 포함은 include_descendants)
 curl -X POST http://localhost:8000/v1/retrieve \
@@ -89,8 +95,8 @@ curl -X POST http://localhost:8000/v1/query \
 | `PATCH /v1/groups/{id}` | 이름·이동 |
 | `DELETE /v1/groups/{id}` | 빈 그룹만 삭제 |
 | `GET /v1/groups/{id}/documents` | 직접 소속 문서 |
-| `POST /v1/documents` | 문서 업로드 (`group_id` Form 필수). 목표: 내부 MarkItDown 후 적재 |
-| `POST /v1/documents/parsed` | 파싱된 Markdown 수신 후 동일 적재 (**목표**, 미구현) |
+| `POST /v1/documents` | 원본 업로드 (`group_id` 필수) → MarkItDown → 적재 |
+| `POST /v1/documents/parsed` | 파싱된 Markdown 수신 후 동일 적재 |
 | `GET /v1/documents/{id}` | 인덱싱 상태 (`group_id`, `group_path`) |
 | `POST /v1/retrieve` | hybrid/dense/sparse 검색 |
 | `POST /v1/query` | 검색 + LLM 답변 |
@@ -134,7 +140,7 @@ Postgres는 `pgvector/pgvector:pg16` 이미지 사용. OpenSearch 클러스터 �
 src/rag/
 ├── api/           # FastAPI (documents, groups, retrieve/query)
 ├── groups/        # 트리 path, 검색 필터, CRUD
-├── ingestion/     # parser, chunker
+├── ingestion/     # markdown (MarkItDown), chunker
 ├── indexing/      # pgvector_backend, Kiwi morphology
 ├── retrieval/     # RRF, rerank pipeline
 ├── generation/    # LLM

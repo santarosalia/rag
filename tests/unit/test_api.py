@@ -41,6 +41,39 @@ async def test_upload_requires_group_id(app):
 
 
 @pytest.mark.asyncio
+async def test_parsed_rejects_blank_markdown(app):
+    from uuid import uuid4
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/documents/parsed",
+            json={
+                "group_id": str(uuid4()),
+                "filename": "a.pdf",
+                "markdown": "   ",
+            },
+            headers={"X-API-Key": "dev-api-key-change-me"},
+        )
+        assert response.status_code == 400
+        assert "markdown" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_parsed_requires_filename(app):
+    from uuid import uuid4
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/documents/parsed",
+            json={"group_id": str(uuid4()), "markdown": "# hi"},
+            headers={"X-API-Key": "dev-api-key-change-me"},
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_api_key_required(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

@@ -18,7 +18,7 @@ flowchart TB
 
   subgraph ingest [Ingestion]
     Upload[Document Upload]
-    Parser[Parser PDF/MD/HTML]
+    MD[MarkItDown / parsed Markdown]
     Chunker[Semantic Chunker]
     EmbedWorker[Embedding BGE-M3]
     MorphWorker[Kiwi Morphology]
@@ -43,7 +43,7 @@ flowchart TB
   FastAPI --> Upload
   Upload --> S3
   Upload --> CeleryWorker
-  CeleryWorker --> Parser --> Chunker --> EmbedWorker
+  CeleryWorker --> MD --> Chunker --> EmbedWorker
   EmbedWorker --> MorphWorker --> PG
 
   FastAPI --> Dense
@@ -128,8 +128,8 @@ src/rag/
 │   ├── filter.py     # retrieve SQL 필터
 │   └── service.py    # CRUD, 이동, 삭제 정책
 ├── ingestion/
-│   ├── parsers.py    # PDF, MD, HTML, TXT
-│   ├── chunker.py    # SemanticChunker
+│   ├── markdown.py   # MarkItDown / 경로 B 패스스루
+│   ├── chunker.py    # SemanticChunker (헤딩·표)
 │   └── pipeline.py   # IngestionPipeline
 ├── retrieval/
 │   ├── embeddings.py # BGE-M3, reranker, cache

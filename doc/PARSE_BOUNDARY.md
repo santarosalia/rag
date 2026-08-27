@@ -27,7 +27,7 @@
                                     retrieve / query (이 저장소)
 ```
 
-| 경로 | API (목표) | 이 저장소가 하는 일 |
+| 경로 | API | 이 저장소가 하는 일 |
 |------|------------|---------------------|
 | **A. 원본** | `POST /v1/documents` | 파일 수신 → S3 → **MarkItDown** → 아래와 동일 |
 | **B. 파싱본** | `POST /v1/documents/parsed` | **Markdown + 메타** 수신 → (선택) S3에 `.md` 보관 → 아래와 동일 |
@@ -36,7 +36,7 @@
 
 `group_id`는 두 업로드 모두 **필수**.
 
-**현재 코드:** `POST /v1/documents`만 있고 파서는 PyMuPDF 등 `ingestion/parsers.py`다. MarkItDown 전환과 `/parsed` 는 **목표 설계**이며 아직 미구현이다.
+**현재 코드:** `POST /v1/documents`(경로 A, MarkItDown)와 `POST /v1/documents/parsed`(경로 B)가 같은 적재 파이프라인으로 합류한다.
 
 ---
 
@@ -51,7 +51,7 @@
 
 ---
 
-## 3. 목표 API
+## 3. API
 
 둘 다 즉시 `doc_id` / `job_id`를 돌려주고, 적재는 기존처럼 Celery가 수행한다 (ADR-0005).
 
@@ -70,7 +70,7 @@ multipart:
 
 ### 3.2 `POST /v1/documents/parsed` — 파싱 결과 수신 (경로 B)
 
-JSON (초안):
+JSON:
 
 ```json
 {
@@ -117,7 +117,8 @@ Markdown
 | `filename` | citation (원본 파일명/논리 경로) |
 | `content_type` | 원본 MIME |
 | `content_hash` | 중복·변경 감지 |
-| `s3_key` | 경로 A: 원본. 경로 B: 변환 Markdown 또는 비움 |
+| `s3_key` | 경로 A: 원본. 경로 B: 변환 Markdown (`.md`) |
+| `parse_kind` | `original` (경로 A) / `markdown` (경로 B) |
 | `status` | **`completed`만 검색 대상** |
 
 ### 4.2 `chunks`
@@ -214,13 +215,13 @@ MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용
 
 ## 8. 체크리스트 (구현 시)
 
-- [ ] 경로 A: `parsers.py` → MarkItDown, 이후 기존 chunk/embed와 연결
-- [ ] 경로 B: `POST /v1/documents/parsed` (`group_id`, `filename`, `markdown`)
-- [ ] 두 경로 모두 동일 Celery 적재, `group_id`/`group_path` 기록
-- [ ] `documents.status = completed` 후에만 검색
-- [ ] chunk INSERT → commit → embedding/`tsv` UPDATE 순서 유지
-- [ ] citation: `chunk_id`, `doc_id`, `filename`
-- [ ] 삭제: `status=deleted` + 검색 컬럼 NULL
+- [x] 경로 A: `parsers.py` → MarkItDown, 이후 기존 chunk/embed와 연결
+- [x] 경로 B: `POST /v1/documents/parsed` (`group_id`, `filename`, `markdown`)
+- [x] 두 경로 모두 동일 Celery 적재, `group_id`/`group_path` 기록
+- [x] `documents.status = completed` 후에만 검색
+- [x] chunk INSERT → commit → embedding/`tsv` UPDATE 순서 유지
+- [x] citation: `chunk_id`, `doc_id`, `filename`
+- [x] 삭제: `status=deleted` + 검색 컬럼 NULL
 - [ ] golden set: 원본→MD(경로 A) / 외부 MD(경로 B) → retrieve citation assert
 
 ---

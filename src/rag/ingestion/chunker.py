@@ -3,6 +3,9 @@ from dataclasses import dataclass
 
 import tiktoken
 
+_HEADING = re.compile(r"(?m)^(?=#{1,3} )")
+_TABLE_LINE = re.compile(r"^\s*\|.*\|\s*$")
+
 
 @dataclass
 class TextChunk:
@@ -36,44 +39,69 @@ class SemanticChunker:
         if not text:
             return []
 
-        paragraphs = self._split_paragraphs(text)
         chunks: list[TextChunk] = []
         current_parts: list[str] = []
         current_tokens = 0
         chunk_index = 0
 
-        for para in paragraphs:
-            para_tokens = self.count_tokens(para)
-
-            if para_tokens > self.max_tokens:
-                if current_parts:
-                    chunks.append(self._make_chunk(" ".join(current_parts), chunk_index, page))
-                    chunk_index += 1
-                    current_parts = []
-                    current_tokens = 0
-
-                sub_chunks = self._split_oversized(para)
-                for sub in sub_chunks:
-                    chunks.append(self._make_chunk(sub, chunk_index, page))
-                    chunk_index += 1
-                continue
-
-            if current_tokens + para_tokens > self.max_tokens and current_parts:
-                chunks.append(self._make_chunk(" ".join(current_parts), chunk_index, page))
+        def flush() -> None:
+            nonlocal current_parts, current_tokens, chunk_index
+            if not current_parts:
+                return
+            content = "\n\n".join(current_parts).strip()
+            if not content:
+                current_parts = []
+                current_tokens = 0
+                return
+            if self.count_tokens(content) >= self.min_chunk_tokens or not chunks:
+                chunks.append(self._make_chunk(content, chunk_index, page))
                 chunk_index += 1
-                overlap = self._get_overlap(current_parts)
-                current_parts = overlap + [para] if overlap else [para]
-                current_tokens = self.count_tokens(" ".join(current_parts))
-            else:
-                current_parts.append(para)
-                current_tokens += para_tokens
+            current_parts = []
+            current_tokens = 0
+
+        for section in self._split_heading_sections(text):
+            for block in self._markdown_blocks(section):
+                block_tokens = self.count_tokens(block)
+                if self._is_table_block(block):
+                    if current_tokens + block_tokens > self.max_tokens and current_parts:
+                        flush()
+                    current_parts.append(block)
+                    current_tokens = self.count_tokens("\n\n".join(current_parts))
+                    continue
+
+                if block_tokens > self.max_tokens:
+                    if current_parts:
+                        overlap = self._get_overlap(current_parts)
+                        flush()
+                        current_parts = list(overlap)
+                        current_tokens = self._parts_tokens(current_parts)
+                    for sub in self._split_oversized(block):
+                        if current_parts:
+                            flush()
+                        chunks.append(self._make_chunk(sub, chunk_index, page))
+                        chunk_index += 1
+                    continue
+
+                if current_tokens + block_tokens > self.max_tokens and current_parts:
+                    overlap = self._get_overlap(current_parts)
+                    flush()
+                    current_parts = list(overlap)
+                    current_tokens = self._parts_tokens(current_parts)
+
+                current_parts.append(block)
+                current_tokens = self.count_tokens("\n\n".join(current_parts))
 
         if current_parts:
-            content = " ".join(current_parts)
-            if self.count_tokens(content) >= self.min_chunk_tokens or not chunks:
+            content = "\n\n".join(current_parts).strip()
+            if content and (self.count_tokens(content) >= self.min_chunk_tokens or not chunks):
                 chunks.append(self._make_chunk(content, chunk_index, page))
 
         return chunks
+
+    def _parts_tokens(self, parts: list[str]) -> int:
+        if not parts:
+            return 0
+        return self.count_tokens("\n\n".join(parts))
 
     def _make_chunk(self, content: str, chunk_index: int, page: int | None) -> TextChunk:
         return TextChunk(
@@ -83,14 +111,56 @@ class SemanticChunker:
             token_count=self.count_tokens(content),
         )
 
-    def _split_paragraphs(self, text: str) -> list[str]:
-        parts = re.split(r"\n\s*\n+", text)
-        result = []
-        for part in parts:
-            part = part.strip()
-            if part:
-                result.append(re.sub(r"\s+", " ", part))
-        return result
+    def _split_heading_sections(self, text: str) -> list[str]:
+        matches = list(_HEADING.finditer(text))
+        if not matches:
+            return [text]
+        sections: list[str] = []
+        if matches[0].start() > 0:
+            prefix = text[: matches[0].start()].strip()
+            if prefix:
+                sections.append(prefix)
+        for i, match in enumerate(matches):
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            section = text[match.start() : end].strip()
+            if section:
+                sections.append(section)
+        return sections
+
+    def _markdown_blocks(self, section: str) -> list[str]:
+        blocks: list[str] = []
+        buf: list[str] = []
+        in_table = False
+
+        def flush_buf() -> None:
+            nonlocal buf
+            joined = "\n".join(buf).strip()
+            if joined:
+                blocks.append(joined)
+            buf = []
+
+        for line in section.split("\n"):
+            is_table_line = bool(_TABLE_LINE.match(line))
+            if is_table_line:
+                if buf and not in_table:
+                    flush_buf()
+                in_table = True
+                buf.append(line)
+                continue
+            if in_table:
+                flush_buf()
+                in_table = False
+            if not line.strip():
+                flush_buf()
+            else:
+                buf.append(line)
+        flush_buf()
+        return blocks
+
+    @staticmethod
+    def _is_table_block(block: str) -> bool:
+        lines = [line for line in block.split("\n") if line.strip()]
+        return bool(lines) and all(_TABLE_LINE.match(line) for line in lines)
 
     def _split_oversized(self, text: str) -> list[str]:
         sentences = re.split(r"(?<=[.!?。！？])\s+", text)

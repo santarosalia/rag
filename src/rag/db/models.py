@@ -91,6 +91,7 @@ class Document(Base):
     content_type: Mapped[str] = mapped_column(String(128))
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     s3_key: Mapped[str] = mapped_column(String(1024))
+    parse_kind: Mapped[str] = mapped_column(String(16), default="original", nullable=False)
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(
             DocumentStatus,

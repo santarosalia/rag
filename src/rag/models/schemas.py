@@ -40,6 +40,14 @@ class DocumentResponse(BaseModel):
     updated_at: datetime
 
 
+class ParsedDocumentRequest(BaseModel):
+    group_id: UUID
+    filename: str = Field(..., min_length=1, max_length=512)
+    markdown: str = Field(..., max_length=5_000_000)
+    content_type: str | None = Field(default=None, max_length=128)
+    content_hash: str | None = Field(default=None, min_length=64, max_length=64)
+
+
 class RetrieveRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=4096)
     mode: SearchMode = SearchMode.HYBRID

@@ -16,6 +16,7 @@ from rag.models.schemas import (
     DocumentResponse,
     DocumentStatus,
     DocumentUploadResponse,
+    ParsedDocumentRequest,
     QueryRequest,
     QueryResponse,
     RetrieveRequest,
@@ -72,6 +73,49 @@ async def upload_document(
     )
 
     stored = storage.upload(data, file.filename, doc_id=document.id)
+    document.s3_key = stored.key
+    await db.flush()
+
+    task = _enqueue_ingest(str(document.id), str(job.id))
+    job.celery_task_id = task.id
+    await db.flush()
+
+    return DocumentUploadResponse(
+        doc_id=document.id,
+        job_id=job.id,
+        status=DocumentStatus.PENDING,
+    )
+
+
+@router.post("/documents/parsed", response_model=DocumentUploadResponse)
+async def upload_parsed_document(
+    body: ParsedDocumentRequest,
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUploadResponse:
+    markdown = body.markdown.strip()
+    if not markdown:
+        raise HTTPException(status_code=400, detail="markdown is required")
+    filename = body.filename.strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="filename is required")
+
+    await require_group(db, body.group_id)
+
+    data = markdown.encode("utf-8")
+    content_hash = body.content_hash or compute_content_hash(data)
+    storage = ObjectStorage()
+
+    document, job = await create_document_record(
+        db,
+        filename=filename,
+        content_type=body.content_type or "text/markdown",
+        content_hash=content_hash,
+        s3_key="pending",
+        group_id=body.group_id,
+        parse_kind="markdown",
+    )
+
+    stored = storage.upload(data, "content.md", doc_id=document.id)
     document.s3_key = stored.key
     await db.flush()
 

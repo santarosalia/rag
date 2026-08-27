@@ -38,7 +38,7 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 
 | 경로 | 입력 | 파싱 | 이후 |
 |------|------|------|------|
-| A. 원본 | `POST /v1/documents` 파일 | 이 저장소 MarkItDown (목표) | 동일 적재 파이프라인 |
+| A. 원본 | `POST /v1/documents` 파일 | 이 저장소 MarkItDown | 동일 적재 파이프라인 |
 | B. 파싱본 | `POST /v1/documents/parsed` Markdown | 외부 파서 | 동일 적재 파이프라인 |
 
 외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다. 중간 포맷은 Markdown.  
@@ -58,7 +58,7 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastAPI (rag-api)                            │
-│  POST /v1/documents  POST /v1/documents/parsed (목표)                │
+│  POST /v1/documents  POST /v1/documents/parsed                       │
 │  GET /v1/documents/{id}  DELETE                                      │
 │  POST /v1/retrieve   POST /v1/query                              │
 │  GET /health  GET /ready  GET /metrics                           │
@@ -110,23 +110,23 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 ### 3.1 흐름
 
 ```
-Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
-       → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
+Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패스스루)
+       → Semantic Chunker → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
        → PostgreSQL documents 상태 갱신
 ```
 
 ### 3.2 지원 문서 포맷
 
-| 포맷 | Parser | 비고 |
-|------|--------|------|
-| PDF | PyMuPDF | 페이지 단위 텍스트 추출 |
-| Markdown | MarkdownParser | 헤딩/문단 구조 유지 |
-| HTML | BeautifulSoup | script/style 제거 |
-| Plain Text | TextParser | fallback |
+경로 A는 원본을 **MarkItDown**으로 Markdown으로 맞춘 뒤 적재한다. 경로 B는 이미 변환된 Markdown을 받는다. 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md).
+
+| 경로 | 입력 | 변환 |
+|------|------|------|
+| A. 원본 | `POST /v1/documents` PDF/DOCX/PPTX 등 | 이 저장소 MarkItDown |
+| B. 파싱본 | `POST /v1/documents/parsed` Markdown | 패스스루 |
 
 ### 3.3 Chunking 전략
 
-**Semantic Chunker** — 문단/헤딩 경계 우선 분할
+**Semantic Chunker** — Markdown 헤딩(`#`/`##`/`###`) 경계 우선, 표는 가능하면 한 청크
 
 | 파라미터 | 기본값 | 설명 |
 |----------|--------|------|
@@ -135,9 +135,9 @@ Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
 | `min_chunk_tokens` | 64 | 최소 청크 크기 |
 
 **설계 원칙:**
-- 고정 길이 분할보다 **의미 단위(문단/문장) 경계** 우선
+- 고정 길이 분할보다 **헤딩·표 경계** 우선
 - overlap으로 경계에 걸린 정보의 recall 손실 방지
-- oversized 문단은 문장 → 단어 단위로 재분할
+- oversized 블록은 문장 → 단어 단위로 재분할
 
 ### 3.4 메타데이터 스키마
 

@@ -10,7 +10,7 @@ from rag.db.models import Chunk, Document, DocumentStatus, Group, IngestJob, Job
 from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
 from rag.ingestion.chunker import SemanticChunker
-from rag.ingestion.parsers import get_parser
+from rag.ingestion.markdown import to_markdown
 from rag.observability.logging import get_logger
 from rag.observability.metrics import INGEST_COUNTER
 from rag.retrieval.embeddings import get_embedding_service
@@ -57,16 +57,16 @@ class IngestionPipeline:
 
         try:
             data = self.storage.download(document.s3_key)
-            parser = get_parser(document.filename)
-            parsed = parser.parse(data, document.filename)
+            markdown = to_markdown(
+                data,
+                filename=document.filename,
+                already_markdown=document.parse_kind == "markdown",
+            )
 
             await session.execute(delete(Chunk).where(Chunk.doc_id == document.id))
             await session.flush()
 
-            all_text_chunks = []
-            for page in parsed.pages:
-                page_chunks = self.chunker.chunk(page.content, page=page.page)
-                all_text_chunks.extend(page_chunks)
+            all_text_chunks = self.chunker.chunk(markdown)
 
             if not all_text_chunks:
                 raise ValueError("No content extracted from document")
@@ -152,6 +152,7 @@ async def create_document_record(
     content_hash: str,
     s3_key: str,
     group_id: uuid.UUID,
+    parse_kind: str = "original",
 ) -> tuple[Document, IngestJob]:
     document = Document(
         filename=filename,
@@ -159,6 +160,7 @@ async def create_document_record(
         content_hash=content_hash,
         s3_key=s3_key,
         group_id=group_id,
+        parse_kind=parse_kind,
         status=DocumentStatus.PENDING,
     )
     session.add(document)
