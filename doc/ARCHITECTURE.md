@@ -156,40 +156,51 @@ src/rag/
 └── config.py
 ```
 
-## Ingest / RAG 분리
+## 파싱 경계 · 적재는 이 저장소
 
-Ingest를 별도 프로젝트로 운영할 때 (pgvector 단일 DB):
+원본 파싱만 외부로 둘 수 있다. chunk/embed/PG 적재와 retrieve는 여기 남는다 (ADR-0008).
 
 ```mermaid
 flowchart LR
-  subgraph ingest_svc [Ingest Service]
-    Upload[Upload / Parse / Chunk]
-    IndexWrite[Embed + Kiwi morph → PG]
+  subgraph entry [진입점]
+    A[POST /v1/documents 원본]
+    B[POST /v1/documents/parsed]
   end
 
-  subgraph rag_svc [RAG Service - this repo]
+  subgraph parse [파싱]
+    MD[MarkItDown 이 저장소]
+    Ext[외부 파서]
+  end
+
+  subgraph load [적재 - 이 저장소]
+    Chunk[Chunk + Embed + Kiwi]
+  end
+
+  subgraph rag_svc [검색]
     Retrieve[POST /v1/retrieve]
     Query[POST /v1/query]
   end
 
   PG[(PostgreSQL documents + chunks)]
 
-  Upload --> IndexWrite --> PG
+  A --> MD --> Chunk
+  Ext -->|Markdown| B --> Chunk
+  Chunk --> PG
   Retrieve --> PG
   Query --> Retrieve
 ```
 
-- ingest: `documents` INSERT + `chunks` INSERT + `embedding`/`content_morph`/`tsv` UPDATE
-- RAG: `chunks` JOIN `documents`로 dense/sparse 검색 및 citation (`source`, `filename`, `page`)
-- **공유 PostgreSQL 필수** — 별도 검색 엔진 없음 (ADR-0002)
+- 경로 A: 원본 → MarkItDown → 공통 적재
+- 경로 B: 외부 Markdown → 공통 적재 (PG 직접 write 없음)
+- 검색: `chunks` JOIN `documents` (`filename`, `page`, `group_id`)
 
-계약·체크리스트: [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md)
+계약: [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md)
 
 ## 확장 포인트
 
 | 확장 | 방법 |
 |------|------|
-| 새 문서 포맷 | `ingestion/parsers.py`에 Parser 추가 |
+| 새 문서 포맷 | 경로 A MarkItDown extras, 또는 경로 B 외부 파서 |
 | 새 embedding 모델 | `EMBEDDING_MODEL` env + `vector(N)` dimension 변경 |
 | LLM provider 교체 | `LLM_BASE_URL` + `LLM_API_KEY` |
 | Tenant 격리 | `group_id` / `group_path` 필터 (현재) → schema-per-tenant (Phase 2) |

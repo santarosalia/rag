@@ -38,7 +38,7 @@ Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citatio
 | Reranker | BAAI/bge-reranker-v2-m3 |
 | LLM | OpenAI-compatible API |
 
-> [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/GROUP_TREE_PLANNING.md`](doc/GROUP_TREE_PLANNING.md) · [`doc/adr/`](doc/adr/) · [`doc/INGEST_BOUNDARY.md`](doc/INGEST_BOUNDARY.md)
+> [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/GROUP_TREE_PLANNING.md`](doc/GROUP_TREE_PLANNING.md) · [`doc/adr/`](doc/adr/) · [`doc/PARSE_BOUNDARY.md`](doc/PARSE_BOUNDARY.md)
 
 ---
 
@@ -89,7 +89,8 @@ curl -X POST http://localhost:8000/v1/query \
 | `PATCH /v1/groups/{id}` | 이름·이동 |
 | `DELETE /v1/groups/{id}` | 빈 그룹만 삭제 |
 | `GET /v1/groups/{id}/documents` | 직접 소속 문서 |
-| `POST /v1/documents` | 문서 업로드 (`group_id` Form 필수) |
+| `POST /v1/documents` | 문서 업로드 (`group_id` Form 필수). 목표: 내부 MarkItDown 후 적재 |
+| `POST /v1/documents/parsed` | 파싱된 Markdown 수신 후 동일 적재 (**목표**, 미구현) |
 | `GET /v1/documents/{id}` | 인덱싱 상태 (`group_id`, `group_path`) |
 | `POST /v1/retrieve` | hybrid/dense/sparse 검색 |
 | `POST /v1/query` | 검색 + LLM 답변 |

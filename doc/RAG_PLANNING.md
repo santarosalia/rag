@@ -32,17 +32,17 @@
 - Graph RAG / Agentic RAG
 - 사용자 피드백 기반 online learning
 
-### 1.4 Ingest 분리 (별도 프로젝트)
+### 1.4 파싱 경계 (적재는 이 저장소)
 
-Ingest(파싱·청킹·임베딩·Kiwi morph·PG 적재)를 **외부 서비스**로 두고, 이 저장소는 **RAG(query/retrieve) 전용**으로 운영할 수 있다.
+Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적재·검색은 **본 저장소**가 담당한다. 바깥으로 둘 수 있는 것은 **원본 파싱**뿐이다.
 
-| 구분 | 담당 |
-|------|------|
-| Ingest 프로젝트 | 업로드, 파싱, chunking, embedding, Kiwi morph, PG `documents`/`chunks` 적재, S3 |
-| RAG 프로젝트 (본 저장소) | pgvector kNN + FTS retrieve, rerank, LLM, citation |
+| 경로 | 입력 | 파싱 | 이후 |
+|------|------|------|------|
+| A. 원본 | `POST /v1/documents` 파일 | 이 저장소 MarkItDown (목표) | 동일 적재 파이프라인 |
+| B. 파싱본 | `POST /v1/documents/parsed` Markdown | 외부 파서 | 동일 적재 파이프라인 |
 
-pgvector 단일 스택에서는 citation이 **`documents` JOIN `chunks`**에 의존하므로, ingest는 **공유 PostgreSQL + 동일 스키마**가 필수다.  
-→ 상세: [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md)
+외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다. 중간 포맷은 Markdown.  
+→ 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md)
 
 ---
 
@@ -58,7 +58,8 @@ pgvector 단일 스택에서는 citation이 **`documents` JOIN `chunks`**에 의
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastAPI (rag-api)                            │
-│  POST /v1/documents  GET /v1/documents/{id}  DELETE              │
+│  POST /v1/documents  POST /v1/documents/parsed (목표)                │
+│  GET /v1/documents/{id}  DELETE                                      │
 │  POST /v1/retrieve   POST /v1/query                              │
 │  GET /health  GET /ready  GET /metrics                           │
 └───────┬──────────────────────────────┬──────────────────────────┘
@@ -440,7 +441,7 @@ CI에서 Recall@5, MRR threshold gate.
 | PostgreSQL 검색 부하 | 쿼리 지연 | HNSW/GIN 튜닝, read replica, connection pool |
 | LLM 비용 | 운영 비용 증가 | retrieve-only endpoint, context budget |
 | 모델 cold start | 첫 요청 지연 | model cache volume, warm-up job |
-| Ingest 분리 시 메타 누락 | citation·검색 JOIN 실패 | [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md) PG 계약 + integration test |
+| 외부 파싱 Markdown 메타 누락 | citation·그룹 필터 부실 | [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) `/parsed` 계약 + golden set |
 
 ---
 
@@ -449,4 +450,4 @@ CI에서 Recall@5, MRR threshold gate.
 - [README](../README.md) — Quick Start, API 레퍼런스
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
 - [adr/](adr/) — Architecture Decision Records
-- [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md) — Ingest/RAG 분리·메타데이터 계약
+- [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md) — 파싱 경계, 이중 진입점, 적재 계약

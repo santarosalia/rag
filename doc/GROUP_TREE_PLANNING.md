@@ -6,7 +6,7 @@
 > **작성일:** 2026-08-27  
 > **상태:** Phase A·B 구현 완료
 
-관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md) · [`ADR-0007`](adr/0007-groups-tree-replaces-tenant-id.md)
+관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ADR-0007`](adr/0007-groups-tree-replaces-tenant-id.md)
 
 ---
 
@@ -276,7 +276,7 @@ Base: `/v1/groups`
 | `api/routes.py`, schemas | 그룹 CRUD + Form `group_id` + retrieve body |
 | `configs/default.yaml` | `groups.max_depth` |
 | `scripts/ingest_cli.py` | `--group-id` (필수) |
-| ingest 외부 계약 | `INGEST_BOUNDARY.md`의 `tenant_id`를 `group_id`/`group_path`로 |
+| ingest 외부 계약 | `PARSE_BOUNDARY.md`의 `tenant_id`를 `group_id`/`group_path`로 |
 
 임베딩 모델·청커·LLM은 **변경 없음**.
 
