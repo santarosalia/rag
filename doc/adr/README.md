@@ -23,8 +23,10 @@
 | [0004](0004-rrf-hybrid-fusion.md) | RRF로 Dense/Sparse 결과 융합 | Accepted |
 | [0005](0005-celery-redis-async-ingestion.md) | Celery + Redis 비동기 인제스트 | Accepted |
 | [0006](0006-openai-compatible-llm-api.md) | OpenAI-compatible LLM API | Accepted |
+| [0007](0007-groups-tree-replaces-tenant-id.md) | tenant_id를 그룹 트리로 교체 | Accepted |
 
 ## 관련 문서
 
 - [RAG 기획서](../RAG_PLANNING.md)
 - [아키텍처 상세](../ARCHITECTURE.md)
+- [그룹 트리 기획](../GROUP_TREE_PLANNING.md)

@@ -6,7 +6,7 @@
 > **작성일:** 2026-08-27  
 > **상태:** Phase A·B 구현 완료
 
-관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md)
+관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md) · [`ADR-0007`](adr/0007-groups-tree-replaces-tenant-id.md)
 
 ---
 

@@ -1,6 +1,6 @@
 # RAG 아키텍처 상세
 
-> [RAG 기획서](./RAG_PLANNING.md) · [ADR](./adr/)
+> [RAG 기획서](./RAG_PLANNING.md) · [그룹 트리](./GROUP_TREE_PLANNING.md) · [ADR](./adr/)
 
 ## 컴포넌트 다이어그램
 
@@ -61,7 +61,7 @@ flowchart TB
 
 ### 인덱싱
 
-1. Client → `POST /v1/documents` (multipart file)
+1. Client → `POST /v1/documents` (multipart file + **필수** `group_id`)
 2. API → S3 upload + PostgreSQL document record (status: pending)
 3. API → Celery `ingest_document` task enqueue
 4. Worker → parse → chunk → embed (BGE-M3) → Kiwi morph
@@ -105,6 +105,8 @@ WHERE id = :chunk_id;
 
 | 컬럼 | 타입 | 용도 |
 |------|------|------|
+| `group_id` | UUID | 소속 그룹 복제 (직접 소속 필터) |
+| `group_path` | varchar | materialized path (하위 포함 검색) |
 | `content` | text | 원문 (citation snippet) |
 | `content_morph` | text | Kiwi 형태소 분석 결과 |
 | `embedding` | vector(1024) | Dense kNN (cosine, HNSW) |
@@ -118,8 +120,13 @@ WHERE id = :chunk_id;
 src/rag/
 ├── api/              # FastAPI app, routes, middleware
 │   ├── main.py       # lifespan, health/ready/metrics
-│   ├── routes.py     # /v1/* endpoints
+│   ├── routes.py     # /v1/documents, retrieve, query
+│   ├── groups.py     # /v1/groups CRUD + tree
 │   └── middleware.py # API key, rate limit
+├── groups/
+│   ├── tree.py       # path, cycle, assemble
+│   ├── filter.py     # retrieve SQL 필터
+│   └── service.py    # CRUD, 이동, 삭제 정책
 ├── ingestion/
 │   ├── parsers.py    # PDF, MD, HTML, TXT
 │   ├── chunker.py    # SemanticChunker
@@ -138,7 +145,7 @@ src/rag/
 ├── workers/
 │   └── celery_app.py
 ├── db/
-│   ├── models.py     # Document, Chunk, IngestJob
+│   ├── models.py     # Group, Document, Chunk, IngestJob
 │   └── session.py
 ├── storage/
 │   └── s3.py
