@@ -118,8 +118,42 @@ curl -X POST http://localhost:8000/v1/query \
 pip install -e ".[dev]"
 pytest tests/unit tests/eval -v
 ruff check src tests scripts
+```
+
+### 검색 속도 벤치마크
+
+```bash
 python scripts/benchmark_retrieval.py "질의" --iterations 10
 ```
+
+`POST /v1/retrieve` latency Mean/P50/P95를 출력합니다.
+
+### RAGAS 품질 평가
+
+end-to-end 답변 품질(Faithfulness, Context Recall/Precision 등)을 YAML 데이터셋으로 측정합니다.
+
+```bash
+# 템플릿 복사 후 question / ground_truth 수정
+cp tests/eval/ragas_template.yaml tests/eval/my_eval.yaml
+
+# RAG만 확인 (judge LLM 비용 없음)
+rag-eval tests/eval/my_eval.yaml --dry-run
+
+# RAGAS 전체 (스택 + LLM_API_KEY 필요, group_id 코퍼스 ingest 선행)
+rag-eval tests/eval/my_eval.yaml --output results/ragas_run.json
+
+# HTTP로 RAG 호출 (snippet만 context → faithfulness는 direct보다 낮을 수 있음)
+rag-eval tests/eval/my_eval.yaml --runner api --api-url http://localhost:8000
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `defaults.runner: direct` | in-process `QueryService`, chunk **전문** (기본, 권장) |
+| `defaults.runner: api` | `/v1/query` HTTP, citation snippet만 |
+| `defaults.metrics` | `faithfulness`, `context_recall`, `context_precision`, `answer_relevancy` |
+| `defaults.thresholds` | 미달 시 exit code 1 |
+
+템플릿: [`tests/eval/ragas_template.yaml`](tests/eval/ragas_template.yaml) · 키워드 gold: [`tests/eval/docuops_tax.yaml`](tests/eval/docuops_tax.yaml)
 
 ---
 
