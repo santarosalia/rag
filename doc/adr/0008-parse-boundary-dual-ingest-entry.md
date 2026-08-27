@@ -29,7 +29,7 @@
 
 이후 파이프라인은 공유한다. 외부 파서는 PG에 쓰지 않고, chunk/embedding도 보내지 않는다.
 
-`group_id`는 두 API 모두 필수 (ADR-0007).
+`group_id`는 두 API 모두 필수 (ADR-0009). UUID가 아니어도 된다.
 
 ## 대안
 

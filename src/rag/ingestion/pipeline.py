@@ -85,7 +85,6 @@ class IngestionPipeline:
                     id=chunk_id,
                     doc_id=document.id,
                     group_id=document.group_id,
-                    group_path=group.path,
                     chunk_index=text_chunk.chunk_index,
                     content=text_chunk.content,
                     token_count=text_chunk.token_count,
@@ -101,7 +100,6 @@ class IngestionPipeline:
                         content=text_chunk.content,
                         embedding=embedding,
                         group_id=str(document.group_id),
-                        group_path=group.path,
                         filename=document.filename,
                         page=text_chunk.page,
                         chunk_index=text_chunk.chunk_index,
@@ -151,7 +149,7 @@ async def create_document_record(
     content_type: str,
     content_hash: str,
     s3_key: str,
-    group_id: uuid.UUID,
+    group_id: str,
     parse_kind: str = "original",
 ) -> tuple[Document, IngestJob]:
     document = Document(

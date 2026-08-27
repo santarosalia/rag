@@ -1,6 +1,5 @@
 import time
 from typing import Any
-from uuid import UUID
 
 from rag.config import get_settings
 from rag.indexing.factory import get_search_backend
@@ -37,9 +36,7 @@ class RetrievalPipeline:
         self,
         query: str,
         mode: SearchMode = SearchMode.HYBRID,
-        group_id: UUID | None = None,
-        include_descendants: bool = False,
-        group_path: str | None = None,
+        group_id: str | None = None,
         top_k: int | None = None,
         rerank: bool = True,
     ) -> tuple[list[Citation], dict[str, float]]:
@@ -63,8 +60,6 @@ class RetrievalPipeline:
                 embedding,
                 k=dense_k,
                 group_id=group_id,
-                include_descendants=include_descendants,
-                group_path=group_path,
             )
             latency["dense_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="dense").observe(latency["dense_ms"] / 1000)
@@ -78,8 +73,6 @@ class RetrievalPipeline:
                 query,
                 k=sparse_k,
                 group_id=group_id,
-                include_descendants=include_descendants,
-                group_path=group_path,
             )
             latency["sparse_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="sparse").observe(latency["sparse_ms"] / 1000)

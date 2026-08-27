@@ -1,22 +1,31 @@
-from uuid import uuid4
+import pytest
+from pydantic import ValidationError
 
-from rag.models.schemas import QueryRequest, RetrieveRequest
+from rag.models.schemas import GroupCreate, QueryRequest, RetrieveRequest
 
 
-def test_retrieve_include_descendants_defaults_false():
+def test_retrieve_group_id_optional():
     req = RetrieveRequest(query="hello")
     assert req.group_id is None
-    assert req.include_descendants is False
 
 
-def test_query_include_descendants_defaults_false():
+def test_query_group_id_optional():
     req = QueryRequest(query="hello")
     assert req.group_id is None
-    assert req.include_descendants is False
 
 
-def test_retrieve_accepts_group_id_and_descendants_flag():
-    gid = uuid4()
-    req = RetrieveRequest(query="hello", group_id=gid, include_descendants=True)
-    assert req.group_id == gid
-    assert req.include_descendants is True
+def test_retrieve_accepts_string_group_id():
+    req = RetrieveRequest(query="hello", group_id="ga")
+    assert req.group_id == "ga"
+
+
+def test_group_create_optional_id():
+    body = GroupCreate(name="세무")
+    assert body.id is None
+    body = GroupCreate(id="ga", name="세무")
+    assert body.id == "ga"
+
+
+def test_group_create_rejects_invalid_id():
+    with pytest.raises(ValidationError):
+        GroupCreate(id="not valid", name="세무")

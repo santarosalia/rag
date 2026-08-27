@@ -12,7 +12,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest documents into RAG")
     parser.add_argument("path", type=Path, help="File or directory to ingest")
     parser.add_argument("--api-url", default="http://localhost:8000", help="RAG API base URL")
-    parser.add_argument("--group-id", required=True, help="Destination group UUID")
+    parser.add_argument("--group-id", required=True, help="Destination group id")
     args = parser.parse_args()
 
     path: Path = args.path

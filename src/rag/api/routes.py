@@ -3,7 +3,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from rag.api.groups import router as groups_router
 from rag.db.models import Document
@@ -46,12 +45,12 @@ router.include_router(groups_router)
 @router.post("/documents", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    group_id: UUID | None = Form(default=None),
+    group_id: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
-    if group_id is None:
+    if not group_id or not group_id.strip():
         raise HTTPException(status_code=400, detail="group_id is required")
 
     data = await file.read()
@@ -135,9 +134,7 @@ async def get_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> DocumentResponse:
-    result = await db.execute(
-        select(Document).options(selectinload(Document.group)).where(Document.id == doc_id)
-    )
+    result = await db.execute(select(Document).where(Document.id == doc_id))
     document = result.scalar_one_or_none()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -149,7 +146,6 @@ async def get_document(
         status=DocumentStatus(document.status.value),
         chunk_count=document.chunk_count,
         group_id=document.group_id,
-        group_path=document.group.path,
         error_message=document.error_message,
         created_at=document.created_at,
         updated_at=document.updated_at,
@@ -179,16 +175,12 @@ async def retrieve(
     db: AsyncSession = Depends(get_db),
 ) -> RetrieveResponse:
     try:
-        group_id, include_descendants, group_path = await resolve_search_group(
-            db, request.group_id, request.include_descendants
-        )
+        group_id = await resolve_search_group(db, request.group_id)
         pipeline = RetrievalPipeline()
         citations, latency = await pipeline.retrieve(
             query=request.query,
             mode=request.mode,
             group_id=group_id,
-            include_descendants=include_descendants,
-            group_path=group_path,
             top_k=request.top_k,
             rerank=request.rerank,
         )
@@ -213,15 +205,11 @@ async def query(
     db: AsyncSession = Depends(get_db),
 ) -> QueryResponse:
     try:
-        group_id, include_descendants, group_path = await resolve_search_group(
-            db, request.group_id, request.include_descendants
-        )
+        group_id = await resolve_search_group(db, request.group_id)
         service = QueryService()
         response = await service.query(
             query=request.query,
             group_id=group_id,
-            include_descendants=include_descendants,
-            group_path=group_path,
             top_k=request.top_k,
         )
         QUERY_COUNTER.labels(endpoint="query", status="success").inc()

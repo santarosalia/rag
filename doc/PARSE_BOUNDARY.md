@@ -62,7 +62,7 @@ multipart:
 | 필드 | 필수 | 설명 |
 |------|------|------|
 | `file` | yes | 원본 바이트 |
-| `group_id` | yes | 소속 그룹 UUID |
+| `group_id` | yes | 소속 그룹 ID (문자열, UUID 아니어도 됨) |
 
 이후: S3 원본 저장 → worker에서 MarkItDown → Markdown → 공통 적재.
 
@@ -74,7 +74,7 @@ JSON:
 
 ```json
 {
-  "group_id": "uuid",
+  "group_id": "ga",
   "filename": "업무지침/2024/세무조사.pdf",
   "content_type": "application/pdf",
   "markdown": "# 제목\n\n본문...",
@@ -100,7 +100,7 @@ JSON:
 Markdown
   → Semantic Chunker (헤딩 `#`/`##` 경계 우선)
   → BGE-M3 embed + Kiwi morph
-  → chunks INSERT (content, group_id, group_path, …)
+  → chunks INSERT (content, group_id, …)
   → commit
   → embedding / content_morph / tsv UPDATE
   → documents.status = completed
@@ -126,7 +126,7 @@ Markdown
 | 필드 | 검색/RAG |
 |------|----------|
 | `id` / `doc_id` | citation, 삭제 |
-| `group_id` / `group_path` | 그룹 필터 |
+| `group_id` | 그룹 필터 |
 | `content` | rerank, LLM, snippet |
 | `embedding` | Dense kNN |
 | `content_morph` / `tsv` | Sparse FTS |
@@ -217,7 +217,7 @@ MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용
 
 - [x] 경로 A: `parsers.py` → MarkItDown, 이후 기존 chunk/embed와 연결
 - [x] 경로 B: `POST /v1/documents/parsed` (`group_id`, `filename`, `markdown`)
-- [x] 두 경로 모두 동일 Celery 적재, `group_id`/`group_path` 기록
+- [x] 두 경로 모두 동일 Celery 적재, `group_id` 기록
 - [x] `documents.status = completed` 후에만 검색
 - [x] chunk INSERT → commit → embedding/`tsv` UPDATE 순서 유지
 - [x] citation: `chunk_id`, `doc_id`, `filename`

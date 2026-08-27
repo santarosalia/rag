@@ -1,6 +1,6 @@
 # RAG 아키텍처 상세
 
-> [RAG 기획서](./RAG_PLANNING.md) · [그룹 트리](./GROUP_TREE_PLANNING.md) · [ADR](./adr/)
+> [RAG 기획서](./RAG_PLANNING.md) · [그룹](./GROUP_PLANNING.md) · [ADR](./adr/)
 
 ## 컴포넌트 다이어그램
 
@@ -105,8 +105,7 @@ WHERE id = :chunk_id;
 
 | 컬럼 | 타입 | 용도 |
 |------|------|------|
-| `group_id` | UUID | 소속 그룹 복제 (직접 소속 필터) |
-| `group_path` | varchar | materialized path (하위 포함 검색) |
+| `group_id` | varchar(128) | 소속 그룹 복제 (정확 일치 필터) |
 | `content` | text | 원문 (citation snippet) |
 | `content_morph` | text | Kiwi 형태소 분석 결과 |
 | `embedding` | vector(1024) | Dense kNN (cosine, HNSW) |
@@ -121,12 +120,11 @@ src/rag/
 ├── api/              # FastAPI app, routes, middleware
 │   ├── main.py       # lifespan, health/ready/metrics
 │   ├── routes.py     # /v1/documents, retrieve, query
-│   ├── groups.py     # /v1/groups CRUD + tree
+│   ├── groups.py     # /v1/groups CRUD
 │   └── middleware.py # API key, rate limit
 ├── groups/
-│   ├── tree.py       # path, cycle, assemble
 │   ├── filter.py     # retrieve SQL 필터
-│   └── service.py    # CRUD, 이동, 삭제 정책
+│   └── service.py    # CRUD, 삭제 정책
 ├── ingestion/
 │   ├── markdown.py   # MarkItDown / 경로 B 패스스루
 │   ├── chunker.py    # SemanticChunker (헤딩·표)
@@ -203,5 +201,5 @@ flowchart LR
 | 새 문서 포맷 | 경로 A MarkItDown extras, 또는 경로 B 외부 파서 |
 | 새 embedding 모델 | `EMBEDDING_MODEL` env + `vector(N)` dimension 변경 |
 | LLM provider 교체 | `LLM_BASE_URL` + `LLM_API_KEY` |
-| Tenant 격리 | `group_id` / `group_path` 필터 (현재) → schema-per-tenant (Phase 2) |
+| Tenant 격리 | `group_id` 정확 일치 (현재) → schema-per-tenant (Phase 2) |
 | Dense 전용 스토어 | Qdrant 분리 + RRF 유지 (Phase 3) |

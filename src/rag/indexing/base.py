@@ -1,5 +1,4 @@
-from typing import Any
-from uuid import UUID, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -23,16 +22,12 @@ class SearchBackend(Protocol):
         self,
         embedding: list[float],
         k: int = 50,
-        group_id: UUID | None = None,
-        include_descendants: bool = False,
-        group_path: str | None = None,
+        group_id: str | None = None,
     ) -> list[dict[str, Any]]: ...
 
     async def bm25_search(
         self,
         query_text: str,
         k: int = 50,
-        group_id: UUID | None = None,
-        include_descendants: bool = False,
-        group_path: str | None = None,
+        group_id: str | None = None,
     ) -> list[dict[str, Any]]: ...

@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import text
 
@@ -121,14 +120,10 @@ class PgVectorBackend:
         self,
         embedding: list[float],
         k: int = 50,
-        group_id: UUID | None = None,
-        include_descendants: bool = False,
-        group_path: str | None = None,
+        group_id: str | None = None,
     ) -> list[dict[str, Any]]:
         embedding_literal = "[" + ",".join(str(v) for v in embedding) + "]"
-        group_clause, group_params = group_filter_clause(
-            group_id, include_descendants, group_path
-        )
+        group_clause, group_params = group_filter_clause(group_id)
 
         sql = f"""
             SELECT
@@ -157,18 +152,14 @@ class PgVectorBackend:
         self,
         query_text: str,
         k: int = 50,
-        group_id: UUID | None = None,
-        include_descendants: bool = False,
-        group_path: str | None = None,
+        group_id: str | None = None,
     ) -> list[dict[str, Any]]:
         morph = get_morph_analyzer()
         morph_query = morph.analyze(query_text)
         if not morph_query.strip():
             morph_query = query_text
 
-        group_clause, group_params = group_filter_clause(
-            group_id, include_descendants, group_path
-        )
+        group_clause, group_params = group_filter_clause(group_id)
 
         sql = f"""
             SELECT

@@ -1,8 +1,9 @@
 # ADR-0007: tenant_id 평면 필터를 그룹 트리로 교체
 
-- **상태:** Accepted
+- **상태:** Superseded
 - **날짜:** 2026-08-27
 - **관련:** [GROUP_TREE_PLANNING.md](../GROUP_TREE_PLANNING.md), ADR-0002
+- **대체:** [ADR-0009](0009-flat-groups-caller-defined-id.md) — 평면 그룹 + 호출측 문자열 ID
 
 ## 맥락
 

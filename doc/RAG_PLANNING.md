@@ -1,9 +1,9 @@
 # RAG 시스템 기획서
 
 > **프로젝트명:** Hybrid RAG Platform  
-> **버전:** 0.2.0  
+> **버전:** 0.3.0  
 > **최종 수정:** 2026-08-27  
-> **상태:** Phase 1 구현 완료 (pgvector + Kiwi FTS, 그룹 트리)
+> **상태:** Phase 1 구현 완료 (pgvector + Kiwi FTS, 평면 그룹)
 
 ---
 
@@ -146,7 +146,7 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | id | UUID | 문서 ID |
-| group_id | UUID | 소속 그룹 FK (**필수**) |
+| group_id | string | 소속 그룹 FK (**필수**, UUID 아님) |
 | filename | string | 원본 파일명 (citation 표시) |
 | content_hash | SHA256 | 중복/변경 감지 |
 | status | enum | pending → processing → completed / failed |
@@ -163,8 +163,7 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 | embedding | vector(1024) | Dense kNN (HNSW) |
 | tsv | tsvector | FTS sparse 검색 (GIN) |
 | page | int? | citation |
-| group_id | UUID | 검색 필터 (문서 소속 복제) |
-| group_path | string | 하위 그룹 포함 검색용 path |
+| group_id | string | 검색 필터 (문서 소속 복제) |
 
 ### 3.5 Idempotency
 
@@ -247,18 +246,17 @@ score(chunk) = Σ  1 / (k + rank_i)
 
 | Method | Path | 설명 | Auth |
 |--------|------|------|------|
-| POST | `/v1/groups` | 그룹 생성 | API Key |
-| GET | `/v1/groups` | 루트 또는 `parent_id` 자식 | API Key |
-| GET | `/v1/groups/tree` | 전체 트리 | API Key |
-| GET | `/v1/groups/{id}` | 단건 + 자식 | API Key |
-| PATCH | `/v1/groups/{id}` | 이름·이동 | API Key |
-| DELETE | `/v1/groups/{id}` | 빈 그룹만 삭제 | API Key |
-| GET | `/v1/groups/{id}/documents` | 직접 소속 문서 목록 | API Key |
-| POST | `/v1/documents` | 문서 업로드 (`group_id` Form 필수) → ingest job | API Key |
-| GET | `/v1/documents/{id}` | 문서/인덱싱 상태 조회 | API Key |
-| DELETE | `/v1/documents/{id}` | 소프트 삭제 + 검색 필드 NULL | API Key |
-| POST | `/v1/retrieve` | 검색만 (LLM 없음). `group_id` 선택, `include_descendants` 기본 false | API Key |
-| POST | `/v1/query` | Hybrid search + generate. 동일 그룹 필터 | API Key |
+| POST | `/v1/groups` | 그룹 생성 (`id` 선택, UUID 아니어도 됨) | 없음 |
+| GET | `/v1/groups` | 전체 목록 | 없음 |
+| GET | `/v1/groups/{id}` | 단건 | 없음 |
+| PATCH | `/v1/groups/{id}` | 이름 변경 | 없음 |
+| DELETE | `/v1/groups/{id}` | 빈 그룹만 삭제 | 없음 |
+| GET | `/v1/groups/{id}/documents` | 소속 문서 목록 | 없음 |
+| POST | `/v1/documents` | 문서 업로드 (`group_id` Form 필수) → ingest job | 없음 |
+| GET | `/v1/documents/{id}` | 문서/인덱싱 상태 조회 | 없음 |
+| DELETE | `/v1/documents/{id}` | 소프트 삭제 + 검색 필드 NULL | 없음 |
+| POST | `/v1/retrieve` | 검색만 (LLM 없음). `group_id` 선택 | 없음 |
+| POST | `/v1/query` | Hybrid search + generate. 동일 그룹 필터 | 없음 |
 | GET | `/health` | Liveness | 없음 |
 | GET | `/ready` | Readiness (PG/Redis/pgvector) | 없음 |
 | GET | `/metrics` | Prometheus | 없음 |
@@ -271,8 +269,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 // Request
 {
   "query": "하이브리드 검색이란?",
-  "group_id": "uuid",
-  "include_descendants": false,
+  "group_id": "ga",
   "top_k": 5
 }
 
@@ -309,7 +306,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 |------|---------|---------|
 | 인증 | 없음 (내부망) | JWT |
 | Rate Limit | Redis sliding window (60 req/min) | per-tenant limit |
-| Group isolation | `group_id` / `group_path` filter | row-level / schema isolation |
+| Group isolation | `group_id` 정확 일치 | row-level / schema isolation |
 
 ---
 
