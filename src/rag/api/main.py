@@ -8,7 +8,7 @@ from prometheus_client import make_asgi_app
 from sqlalchemy import text
 
 from rag import __version__
-from rag.api.middleware import APIKeyMiddleware, RateLimitMiddleware
+from rag.api.middleware import RateLimitMiddleware
 from rag.api.routes import router
 from rag.config import get_settings
 from rag.db.session import engine
@@ -57,7 +57,6 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(RateLimitMiddleware, requests_per_minute=rate_limit)
-    app.add_middleware(APIKeyMiddleware)
     app.include_router(router)
     FastAPIInstrumentor.instrument_app(app)
 

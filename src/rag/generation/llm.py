@@ -1,6 +1,7 @@
 import time
 
 import httpx
+import tiktoken
 
 from rag.config import get_settings
 from rag.models.schemas import Citation
@@ -10,21 +11,50 @@ from rag.observability.metrics import LLM_LATENCY
 logger = get_logger(__name__)
 
 
+def _encoding():
+    return tiktoken.get_encoding("cl100k_base")
+
+
+def _count_tokens(text: str) -> int:
+    return len(_encoding().encode(text))
+
+
+def _truncate_tokens(text: str, max_tokens: int) -> str:
+    enc = _encoding()
+    ids = enc.encode(text)
+    if len(ids) <= max_tokens:
+        return text
+    return enc.decode(ids[:max_tokens])
+
+
 def build_context(citations: list[Citation], max_tokens: int = 4096) -> str:
-    """Build numbered context string from citations with token budget."""
+    """Numbered context from full chunk text, truncated to a token budget.
+
+    API ``snippet`` stays short. Generation uses ``content`` when set.
+    Rank order is kept; the last included chunk may be cut mid-text.
+    """
     parts: list[str] = []
-    total_chars = 0
-    char_budget = max_tokens * 4  # rough chars-to-tokens estimate
+    used = 0
 
     for citation in citations:
+        body = citation.content or citation.snippet
         header = f"[{citation.rank}] Source: {citation.filename}"
         if citation.page:
             header += f" (page {citation.page})"
-        block = f"{header}\n{citation.snippet}\n"
-        if total_chars + len(block) > char_budget:
+        header_block = f"{header}\n"
+        header_tokens = _count_tokens(header_block)
+        remaining = max_tokens - used
+        if remaining <= header_tokens:
             break
+        body_budget = remaining - header_tokens
+        body_tokens = _count_tokens(body)
+        if body_tokens > body_budget:
+            body = _truncate_tokens(body, body_budget)
+            parts.append(f"{header_block}{body}\n")
+            break
+        block = f"{header_block}{body}\n"
         parts.append(block)
-        total_chars += len(block)
+        used += header_tokens + body_tokens
 
     return "\n".join(parts)
 

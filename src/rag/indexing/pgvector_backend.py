@@ -1,8 +1,12 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag.db.session import AsyncSessionLocal
+from rag.groups.filter import group_filter_clause
 from rag.indexing.morphology import get_morph_analyzer
 from rag.observability.logging import get_logger
 
@@ -19,6 +23,20 @@ class PgVectorBackend:
     async def close(self) -> None:
         return None
 
+    @asynccontextmanager
+    async def _session(self, session: AsyncSession | None) -> AsyncIterator[AsyncSession]:
+        """Use a caller-owned session (Celery ``worker_session``) or the API pool.
+
+        Celery runs ``asyncio.run()`` per task. Connections checked out from the
+        process-global pool belong to the previous loop and fail with
+        ``Future attached to a different loop`` / ``Event loop is closed``.
+        """
+        if session is not None:
+            yield session
+            return
+        async with AsyncSessionLocal() as owned:
+            yield owned
+
     async def ping(self) -> bool:
         try:
             async with AsyncSessionLocal() as session:
@@ -31,10 +49,10 @@ class PgVectorBackend:
             logger.warning("pgvector_ping_failed", error=str(e))
             return False
 
-    async def ensure_index(self) -> None:
-        async with AsyncSessionLocal() as session:
-            await session.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            await session.execute(
+    async def ensure_index(self, session: AsyncSession | None = None) -> None:
+        async with self._session(session) as sess:
+            await sess.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await sess.execute(
                 text(
                     """
                     CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw
@@ -42,7 +60,7 @@ class PgVectorBackend:
                     """
                 )
             )
-            await session.execute(
+            await sess.execute(
                 text(
                     """
                     CREATE INDEX IF NOT EXISTS idx_chunks_tsv_gin
@@ -50,10 +68,14 @@ class PgVectorBackend:
                     """
                 )
             )
-            await session.commit()
+            await sess.commit()
             logger.info("pgvector_indexes_ensured")
 
-    async def bulk_index(self, documents: list[dict[str, Any]]) -> tuple[int, int]:
+    async def bulk_index(
+        self,
+        documents: list[dict[str, Any]],
+        session: AsyncSession | None = None,
+    ) -> tuple[int, int]:
         if not documents:
             return 0, 0
 
@@ -61,7 +83,7 @@ class PgVectorBackend:
         success = 0
         errors = 0
 
-        async with AsyncSessionLocal() as session:
+        async with self._session(session) as sess:
             for doc in documents:
                 try:
                     chunk_id = doc["chunk_id"]
@@ -70,7 +92,7 @@ class PgVectorBackend:
                     embedding = doc["embedding"]
                     embedding_literal = "[" + ",".join(str(v) for v in embedding) + "]"
 
-                    result = await session.execute(
+                    result = await sess.execute(
                         text(
                             """
                             UPDATE chunks
@@ -96,13 +118,15 @@ class PgVectorBackend:
                         chunk_id=doc.get("chunk_id"),
                         error=str(e),
                     )
-            await session.commit()
+            await sess.commit()
 
         return success, errors
 
-    async def delete_by_doc_id(self, doc_id: str) -> int:
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(
+    async def delete_by_doc_id(
+        self, doc_id: str, session: AsyncSession | None = None
+    ) -> int:
+        async with self._session(session) as sess:
+            result = await sess.execute(
                 text(
                     """
                     UPDATE chunks
@@ -112,18 +136,17 @@ class PgVectorBackend:
                 ),
                 {"doc_id": doc_id},
             )
-            await session.commit()
+            await sess.commit()
             return result.rowcount or 0
 
     async def knn_search(
         self,
         embedding: list[float],
         k: int = 50,
-        tenant_id: str | None = None,
+        group_id: str | None = None,
     ) -> list[dict[str, Any]]:
         embedding_literal = "[" + ",".join(str(v) for v in embedding) + "]"
-
-        tenant_clause = "AND c.tenant_id = :tenant_id" if tenant_id else ""
+        group_clause, group_params = group_filter_clause(group_id)
 
         sql = f"""
             SELECT
@@ -137,15 +160,14 @@ class PgVectorBackend:
             JOIN documents d ON c.doc_id = d.id
             WHERE c.embedding IS NOT NULL
               AND d.status = 'completed'
-              {tenant_clause}
+              {group_clause}
             ORDER BY c.embedding <=> CAST(:embedding AS vector)
             LIMIT :k
         """
 
         async with AsyncSessionLocal() as session:
             params: dict[str, Any] = {"embedding": embedding_literal, "k": k}
-            if tenant_id:
-                params["tenant_id"] = tenant_id
+            params.update(group_params)
             result = await session.execute(text(sql), params)
             return self._rows_to_hits(result.mappings().all())
 
@@ -153,14 +175,14 @@ class PgVectorBackend:
         self,
         query_text: str,
         k: int = 50,
-        tenant_id: str | None = None,
+        group_id: str | None = None,
     ) -> list[dict[str, Any]]:
         morph = get_morph_analyzer()
         morph_query = morph.analyze(query_text)
         if not morph_query.strip():
             morph_query = query_text
 
-        tenant_clause = "AND c.tenant_id = :tenant_id" if tenant_id else ""
+        group_clause, group_params = group_filter_clause(group_id)
 
         sql = f"""
             SELECT
@@ -175,15 +197,14 @@ class PgVectorBackend:
             WHERE c.tsv IS NOT NULL
               AND c.tsv @@ plainto_tsquery('simple', :morph_query)
               AND d.status = 'completed'
-              {tenant_clause}
+              {group_clause}
             ORDER BY score DESC
             LIMIT :k
         """
 
         async with AsyncSessionLocal() as session:
             params: dict[str, Any] = {"morph_query": morph_query, "k": k}
-            if tenant_id:
-                params["tenant_id"] = tenant_id
+            params.update(group_params)
             result = await session.execute(text(sql), params)
             return self._rows_to_hits(result.mappings().all())
 

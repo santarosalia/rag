@@ -36,7 +36,7 @@ class RetrievalPipeline:
         self,
         query: str,
         mode: SearchMode = SearchMode.HYBRID,
-        tenant_id: str | None = None,
+        group_id: str | None = None,
         top_k: int | None = None,
         rerank: bool = True,
     ) -> tuple[list[Citation], dict[str, float]]:
@@ -57,7 +57,9 @@ class RetrievalPipeline:
         if mode in (SearchMode.DENSE, SearchMode.HYBRID):
             t0 = time.perf_counter()
             dense_hits = await self.search_backend.knn_search(
-                embedding, k=dense_k, tenant_id=tenant_id
+                embedding,
+                k=dense_k,
+                group_id=group_id,
             )
             latency["dense_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="dense").observe(latency["dense_ms"] / 1000)
@@ -68,7 +70,9 @@ class RetrievalPipeline:
         if mode in (SearchMode.SPARSE, SearchMode.HYBRID):
             t0 = time.perf_counter()
             sparse_hits = await self.search_backend.bm25_search(
-                query, k=sparse_k, tenant_id=tenant_id
+                query,
+                k=sparse_k,
+                group_id=group_id,
             )
             latency["sparse_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="sparse").observe(latency["sparse_ms"] / 1000)
@@ -108,7 +112,7 @@ class RetrievalPipeline:
         citations = []
         for rank, hit in enumerate(hits, start=1):
             score = hit.get("rerank_score", hit.get("rrf_score", hit.get("score", 0.0)))
-            content = hit.get("content", "")
+            content = hit.get("content", "") or ""
             snippet = content[:300] + ("..." if len(content) > 300 else "")
             citations.append(
                 Citation(
@@ -119,6 +123,7 @@ class RetrievalPipeline:
                     score=float(score),
                     snippet=snippet,
                     rank=rank,
+                    content=content,
                 )
             )
         return citations

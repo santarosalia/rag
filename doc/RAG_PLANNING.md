@@ -1,9 +1,9 @@
 # RAG 시스템 기획서
 
 > **프로젝트명:** Hybrid RAG Platform  
-> **버전:** 0.1.0  
-> **최종 수정:** 2026-08-26  
-> **상태:** Phase 1 구현 완료 (pgvector + Kiwi FTS)
+> **버전:** 0.3.0  
+> **최종 수정:** 2026-08-27  
+> **상태:** Phase 1 구현 완료 (pgvector + Kiwi FTS, 평면 그룹)
 
 ---
 
@@ -32,17 +32,17 @@
 - Graph RAG / Agentic RAG
 - 사용자 피드백 기반 online learning
 
-### 1.4 Ingest 분리 (별도 프로젝트)
+### 1.4 파싱 경계 (적재는 이 저장소)
 
-Ingest(파싱·청킹·임베딩·Kiwi morph·PG 적재)를 **외부 서비스**로 두고, 이 저장소는 **RAG(query/retrieve) 전용**으로 운영할 수 있다.
+Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적재·검색은 **본 저장소**가 담당한다. 바깥으로 둘 수 있는 것은 **원본 파싱**뿐이다.
 
-| 구분 | 담당 |
-|------|------|
-| Ingest 프로젝트 | 업로드, 파싱, chunking, embedding, Kiwi morph, PG `documents`/`chunks` 적재, S3 |
-| RAG 프로젝트 (본 저장소) | pgvector kNN + FTS retrieve, rerank, LLM, citation |
+| 경로 | 입력 | 파싱 | 이후 |
+|------|------|------|------|
+| A. 원본 | `POST /v1/documents` 파일 | 이 저장소 MarkItDown | 동일 적재 파이프라인 |
+| B. 파싱본 | `POST /v1/documents/parsed` JSON 또는 `/parsed/file` | 외부 파서 | 동일 적재 파이프라인 |
 
-pgvector 단일 스택에서는 citation이 **`documents` JOIN `chunks`**에 의존하므로, ingest는 **공유 PostgreSQL + 동일 스키마**가 필수다.  
-→ 상세: [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md)
+외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다. 중간 포맷은 Markdown.  
+→ 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md)
 
 ---
 
@@ -54,11 +54,12 @@ pgvector 단일 스택에서는 citation이 **`documents` JOIN `chunks`**에 의
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Client / Application                      │
 └───────────────────────────────┬─────────────────────────────────┘
-                                │ REST API (X-API-Key)
+                                │ REST API
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastAPI (rag-api)                            │
-│  POST /v1/documents  GET /v1/documents/{id}  DELETE              │
+│  POST /v1/documents  POST /v1/documents/parsed[/file]                │
+│  GET /v1/documents/{id}  DELETE                                      │
 │  POST /v1/retrieve   POST /v1/query                              │
 │  GET /health  GET /ready  GET /metrics                           │
 └───────┬──────────────────────────────┬──────────────────────────┘
@@ -109,34 +110,25 @@ pgvector 단일 스택에서는 citation이 **`documents` JOIN `chunks`**에 의
 ### 3.1 흐름
 
 ```
-Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
-       → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
+Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패스스루)
+       → Semantic Chunker → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
        → PostgreSQL documents 상태 갱신
 ```
 
 ### 3.2 지원 문서 포맷
 
-| 포맷 | Parser | 비고 |
-|------|--------|------|
-| PDF | PyMuPDF | 페이지 단위 텍스트 추출 |
-| Markdown | MarkdownParser | 헤딩/문단 구조 유지 |
-| HTML | BeautifulSoup | script/style 제거 |
-| Plain Text | TextParser | fallback |
+경로 A는 원본을 **MarkItDown**으로 Markdown으로 맞춘 뒤 적재한다. 경로 B는 이미 변환된 Markdown을 받는다. 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md).
+
+| 경로 | 입력 | 변환 |
+|------|------|------|
+| A. 원본 | `POST /v1/documents` PDF/DOCX/PPTX 등 | 이 저장소 MarkItDown |
+| B. 파싱본 | `POST /v1/documents/parsed` JSON 또는 `/parsed/file` | 패스스루 |
 
 ### 3.3 Chunking 전략
 
-**Semantic Chunker** — 문단/헤딩 경계 우선 분할
-
-| 파라미터 | 기본값 | 설명 |
-|----------|--------|------|
-| `max_tokens` | 768 | 청크 최대 토큰 |
-| `overlap_tokens` | 128 | 청크 간 겹침 (recall 안정화) |
-| `min_chunk_tokens` | 64 | 최소 청크 크기 |
-
-**설계 원칙:**
-- 고정 길이 분할보다 **의미 단위(문단/문장) 경계** 우선
-- overlap으로 경계에 걸린 정보의 recall 손실 방지
-- oversized 문단은 문장 → 단어 단위로 재분할
+Markdown ATX 헤딩(`#`–`######`)·파이프 표·코드 펜스·HTML 표 경계를 우선하는 Semantic Chunker (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
+`min_chunk_tokens` 미만 본문은 버리지 않고 이전 청크에 붙인다. 상세: [`CHUNKING.md`](CHUNKING.md).  
+다음: 검색=child / 생성=parent, 거대 표만 행 그룹 — [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md).
 
 ### 3.4 메타데이터 스키마
 
@@ -145,9 +137,8 @@ Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | id | UUID | 문서 ID |
-| tenant_id | string | 멀티테넌시 (optional) |
+| group_id | string | 소속 그룹 FK (**필수**, UUID 아님) |
 | filename | string | 원본 파일명 (citation 표시) |
-| content_hash | SHA256 | 중복/변경 감지 |
 | status | enum | pending → processing → completed / failed |
 | chunk_count | int | 인덱싱된 청크 수 |
 
@@ -157,16 +148,16 @@ Upload → S3 저장 → Celery Job → Parser → Semantic Chunker
 |------|------|------|
 | id | UUID | 청크 고유 ID |
 | doc_id | UUID | 문서 FK |
-| content | text | 원문 (citation snippet) |
+| content | text | 원문 (LLM 컨텍스트 전문, API snippet은 미리보기) |
 | content_morph | text | Kiwi 형태소 분석 결과 |
 | embedding | vector(1024) | Dense kNN (HNSW) |
 | tsv | tsvector | FTS sparse 검색 (GIN) |
-| page, tenant_id | metadata | citation / filter |
+| page | int? | citation |
+| group_id | string | 검색 필터 (문서 소속 복제) |
 
 ### 3.5 Idempotency
 
-- Idempotency key = `{doc_id}:{content_hash}`
-- 동일 내용 재업로드 시 중복 인덱싱 방지
+- Idempotency key = `{doc_id}` (같은 문서 잡의 재시도)
 - Celery retry: max 3회, exponential backoff
 
 ---
@@ -224,7 +215,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 ### 4.6 Generation (LLM)
 
 - **Provider:** OpenAI-compatible API (설정 교체 가능)
-- **Context budget:** 4096 tokens
+- **Context budget:** 4096 tokens (tiktoken `cl100k_base`). 청크 **전문**을 순위대로 넣고 넘치면 마지막만 자른다. API `snippet`은 미리보기(300자)만.
 - **Citation format:** `[1]`, `[2]` — context 번호와 매칭
 - **System prompt:** context 기반 답변, 정보 부족 시 명시, 질문 언어로 답변
 
@@ -244,11 +235,18 @@ score(chunk) = Σ  1 / (k + rank_i)
 
 | Method | Path | 설명 | Auth |
 |--------|------|------|------|
-| POST | `/v1/documents` | 문서 업로드 → ingest job | API Key |
-| GET | `/v1/documents/{id}` | 문서/인덱싱 상태 조회 | API Key |
-| DELETE | `/v1/documents/{id}` | 소프트 삭제 + 검색 필드 NULL | API Key |
-| POST | `/v1/retrieve` | 검색만 (LLM 없음) | API Key |
-| POST | `/v1/query` | Hybrid search + generate | API Key |
+| POST | `/v1/groups` | 그룹 생성 (`id` 선택, UUID 아니어도 됨) | 없음 |
+| GET | `/v1/groups` | 전체 목록 | 없음 |
+| GET | `/v1/groups/{id}` | 단건 | 없음 |
+| DELETE | `/v1/groups/{id}` | 빈 그룹만 삭제 | 없음 |
+| GET | `/v1/groups/{id}/documents` | 소속 문서 목록 | 없음 |
+| POST | `/v1/documents` | 문서 업로드 (`group_id` Form 필수) → ingest job | 없음 |
+| POST | `/v1/documents/parsed` | 파싱 Markdown JSON | 없음 |
+| POST | `/v1/documents/parsed/file` | 파싱 Markdown 파일 | 없음 |
+| GET | `/v1/documents/{id}` | 문서/인덱싱 상태 조회 | 없음 |
+| DELETE | `/v1/documents/{id}` | 소프트 삭제 + 검색 필드 NULL | 없음 |
+| POST | `/v1/retrieve` | 검색만 (LLM 없음). `group_id` 선택 | 없음 |
+| POST | `/v1/query` | Hybrid search + generate. 동일 그룹 필터 | 없음 |
 | GET | `/health` | Liveness | 없음 |
 | GET | `/ready` | Readiness (PG/Redis/pgvector) | 없음 |
 | GET | `/metrics` | Prometheus | 없음 |
@@ -261,7 +259,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 // Request
 {
   "query": "하이브리드 검색이란?",
-  "tenant_id": "team-a",
+  "group_id": "ga",
   "top_k": 5
 }
 
@@ -296,9 +294,9 @@ score(chunk) = Σ  1 / (k + rank_i)
 
 | 항목 | Phase 1 | Phase 2 |
 |------|---------|---------|
-| 인증 | X-API-Key | JWT + API Key |
+| 인증 | 없음 (내부망) | JWT |
 | Rate Limit | Redis sliding window (60 req/min) | per-tenant limit |
-| Tenant isolation | tenant_id filter on search | row-level / schema isolation |
+| Group isolation | `group_id` 정확 일치 | row-level / schema isolation |
 
 ---
 
@@ -389,7 +387,7 @@ deploy/k8s/rag.yaml
 ### Phase 3 — 고급 기능
 
 - [ ] Query rewriting (HyDE, multi-query expansion)
-- [ ] Parent-child chunking (small chunk 검색 → large context 반환)
+- [ ] Parent-child chunking + 거대 표 행 그룹 ([`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md))
 - [ ] Freshness boost (time decay)
 - [ ] User feedback loop (thumbs up/down)
 - [ ] 전용 벡터 DB 분리 (billion-scale dense; OpenSearch 등 검색 엔진 분리도 선택지)
@@ -417,6 +415,7 @@ deploy/k8s/rag.yaml
 ### 10.3 Golden Set
 
 `tests/eval/test_benchmark.py`에 fusion benchmark golden set 포함.  
+세무과 매뉴얼 DocuOps 질의 세트: [`tests/eval/DOCUOPS_TAX.md`](../tests/eval/DOCUOPS_TAX.md) · [`docuops_tax.yaml`](../tests/eval/docuops_tax.yaml).  
 CI에서 Recall@5, MRR threshold gate.
 
 ---
@@ -430,7 +429,7 @@ CI에서 Recall@5, MRR threshold gate.
 | PostgreSQL 검색 부하 | 쿼리 지연 | HNSW/GIN 튜닝, read replica, connection pool |
 | LLM 비용 | 운영 비용 증가 | retrieve-only endpoint, context budget |
 | 모델 cold start | 첫 요청 지연 | model cache volume, warm-up job |
-| Ingest 분리 시 메타 누락 | citation·검색 JOIN 실패 | [`INGEST_BOUNDARY.md`](INGEST_BOUNDARY.md) PG 계약 + integration test |
+| 외부 파싱 Markdown 메타 누락 | citation·그룹 필터 부실 | [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) `/parsed` 계약 + golden set |
 
 ---
 
@@ -439,4 +438,6 @@ CI에서 Recall@5, MRR threshold gate.
 - [README](../README.md) — Quick Start, API 레퍼런스
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
 - [adr/](adr/) — Architecture Decision Records
-- [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md) — Ingest/RAG 분리·메타데이터 계약
+- [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md) — 파싱 경계, 이중 진입점, 적재 계약
+- [CHUNKING.md](CHUNKING.md) — Semantic Chunker 분할 규칙 (현재 구현)
+- [PARENT_CHILD_PLANNING.md](PARENT_CHILD_PLANNING.md) — parent-child · 표 행 단위 (구현 대상)

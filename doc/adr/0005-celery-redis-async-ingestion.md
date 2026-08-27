@@ -24,7 +24,7 @@ API 요청을 동기 blocking하면 timeout·UX 문제가 발생한다.
 | `rag.delete_document` | S3 + chunks index clear + soft delete |
 | `rag.reindex_document` | ingest 재실행 |
 
-- Idempotency key: `{doc_id}:{content_hash}`
+- Idempotency key: `{doc_id}`
 - max_retries: 3, exponential backoff
 
 ## 대안

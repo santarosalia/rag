@@ -1,4 +1,3 @@
-import hashlib
 import uuid
 from dataclasses import dataclass
 
@@ -47,7 +46,3 @@ class ObjectStorage:
 
     def delete(self, key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=key)
-
-
-def compute_content_hash(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()

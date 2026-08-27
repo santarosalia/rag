@@ -12,8 +12,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest documents into RAG")
     parser.add_argument("path", type=Path, help="File or directory to ingest")
     parser.add_argument("--api-url", default="http://localhost:8000", help="RAG API base URL")
-    parser.add_argument("--api-key", default="dev-api-key-change-me", help="API key")
-    parser.add_argument("--tenant-id", default=None, help="Tenant ID")
+    parser.add_argument("--group-id", required=True, help="Destination group id")
     args = parser.parse_args()
 
     path: Path = args.path
@@ -24,12 +23,11 @@ def main() -> None:
     files = [path] if path.is_file() else list(path.rglob("*"))
     files = [f for f in files if f.is_file() and not f.name.startswith(".")]
 
-    headers = {"X-API-Key": args.api_key}
-    client = httpx.Client(base_url=args.api_url, headers=headers, timeout=120.0)
+    client = httpx.Client(base_url=args.api_url, timeout=120.0)
 
     for file_path in files:
         with file_path.open("rb") as f:
-            data = {"tenant_id": args.tenant_id} if args.tenant_id else {}
+            data = {"group_id": args.group_id}
             response = client.post(
                 "/v1/documents",
                 files={"file": (file_path.name, f)},

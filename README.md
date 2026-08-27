@@ -13,7 +13,8 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 | **Hybrid Search** | pgvector kNN(BGE-M3) + PostgreSQL FTS(Kiwi) → RRF 융합 |
 | **Rerank** | Cross-encoder `bge-reranker-v2-m3` (top-50 → top-5) |
 | **Citation** | chunk_id, filename, page, snippet 포함 |
-| **Async Ingest** | PDF / MD / HTML / TXT (Celery) |
+| **Groups** | 평면 문서 그룹. 생성 시 외부 문자열 ID 지정 가능 |
+| **Async Ingest** | 원본(MarkItDown) 또는 파싱 Markdown → chunk/embed (Celery) |
 | **Single DB** | 메타데이터 + 벡터 + FTS 모두 PostgreSQL |
 | **Observability** | Prometheus, structlog, OpenTelemetry |
 
@@ -22,7 +23,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 ## 아키텍처
 
 ```
-Document Upload → Parser → Chunker → Embedding + Kiwi morph → PostgreSQL (pgvector + tsvector)
+Document Upload → MarkItDown (or parsed Markdown) → Chunker → Embedding + Kiwi morph → PostgreSQL (pgvector + tsvector)
                                                                     ↓
 Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citations
 ```
@@ -37,7 +38,7 @@ Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citatio
 | Reranker | BAAI/bge-reranker-v2-m3 |
 | LLM | OpenAI-compatible API |
 
-> [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/adr/`](doc/adr/) · [`doc/INGEST_BOUNDARY.md`](doc/INGEST_BOUNDARY.md)
+> [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/GROUP_PLANNING.md`](doc/GROUP_PLANNING.md) · [`doc/adr/`](doc/adr/) · [`doc/PARSE_BOUNDARY.md`](doc/PARSE_BOUNDARY.md) · [`doc/CHUNKING.md`](doc/CHUNKING.md)
 
 ---
 
@@ -50,20 +51,33 @@ docker compose exec api alembic upgrade head
 ```
 
 ```bash
-# 업로드
-curl -X POST http://localhost:8000/v1/documents \
-  -H "X-API-Key: dev-api-key-change-me" \
-  -F "file=@document.pdf"
-
-# 검색
-curl -X POST http://localhost:8000/v1/retrieve \
-  -H "X-API-Key: dev-api-key-change-me" \
+# 그룹 생성 (id는 호출측이 지정, UUID 아니어도 됨)
+curl -X POST http://localhost:8000/v1/groups \
   -H "Content-Type: application/json" \
-  -d '{"query": "질의", "mode": "hybrid"}'
+  -d '{"id": "ga"}'
+
+# 업로드 (group_id 필수) — 경로 A
+curl -X POST http://localhost:8000/v1/documents \
+  -F "file=@document.pdf" \
+  -F "group_id=ga"
+
+# 파싱된 Markdown JSON — 경로 B
+curl -X POST http://localhost:8000/v1/documents/parsed \
+  -H "Content-Type: application/json" \
+  -d '{"group_id": "ga", "filename": "document.pdf", "markdown": "# 제목\n\n본문"}'
+
+# 파싱된 Markdown 파일 — 경로 B
+curl -X POST http://localhost:8000/v1/documents/parsed/file \
+  -F "file=@document.md" \
+  -F "group_id=ga"
+
+# 검색 (group_id 생략 시 전체)
+curl -X POST http://localhost:8000/v1/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{"query": "질의", "mode": "hybrid", "group_id": "ga"}'
 
 # RAG
 curl -X POST http://localhost:8000/v1/query \
-  -H "X-API-Key: dev-api-key-change-me" \
   -H "Content-Type: application/json" \
   -d '{"query": "질의"}'
 ```
@@ -74,8 +88,15 @@ curl -X POST http://localhost:8000/v1/query \
 
 | Endpoint | 설명 |
 |----------|------|
-| `POST /v1/documents` | 문서 업로드 |
-| `GET /v1/documents/{id}` | 인덱싱 상태 |
+| `POST /v1/groups` | 그룹 생성 (`id` 선택) |
+| `GET /v1/groups` | 목록 |
+| `GET /v1/groups/{id}` | 단건 |
+| `DELETE /v1/groups/{id}` | 빈 그룹만 삭제 |
+| `GET /v1/groups/{id}/documents` | 소속 문서 |
+| `POST /v1/documents` | 원본 업로드 (`group_id` 필수) → MarkItDown → 적재 |
+| `POST /v1/documents/parsed` | 파싱된 Markdown JSON 수신 후 동일 적재 |
+| `POST /v1/documents/parsed/file` | 파싱된 Markdown 파일 수신 후 동일 적재 |
+| `GET /v1/documents/{id}` | 인덱싱 상태 (`group_id`) |
 | `POST /v1/retrieve` | hybrid/dense/sparse 검색 |
 | `POST /v1/query` | 검색 + LLM 답변 |
 | `/health`, `/ready`, `/metrics` | 운영 |
@@ -116,8 +137,9 @@ Postgres는 `pgvector/pgvector:pg16` 이미지 사용. OpenSearch 클러스터 �
 
 ```
 src/rag/
-├── api/           # FastAPI
-├── ingestion/     # parser, chunker
+├── api/           # FastAPI (documents, groups, retrieve/query)
+├── groups/        # 평면 그룹 CRUD, 검색 필터
+├── ingestion/     # markdown (MarkItDown), chunker
 ├── indexing/      # pgvector_backend, Kiwi morphology
 ├── retrieval/     # RRF, rerank pipeline
 ├── generation/    # LLM

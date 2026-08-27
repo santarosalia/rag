@@ -1,6 +1,6 @@
 # RAG 아키텍처 상세
 
-> [RAG 기획서](./RAG_PLANNING.md) · [ADR](./adr/)
+> [RAG 기획서](./RAG_PLANNING.md) · [그룹](./GROUP_PLANNING.md) · [청킹](./CHUNKING.md) · [parent-child 청킹](./PARENT_CHILD_PLANNING.md) · [ADR](./adr/)
 
 ## 컴포넌트 다이어그램
 
@@ -18,7 +18,7 @@ flowchart TB
 
   subgraph ingest [Ingestion]
     Upload[Document Upload]
-    Parser[Parser PDF/MD/HTML]
+    MD[MarkItDown / parsed Markdown]
     Chunker[Semantic Chunker]
     EmbedWorker[Embedding BGE-M3]
     MorphWorker[Kiwi Morphology]
@@ -43,7 +43,7 @@ flowchart TB
   FastAPI --> Upload
   Upload --> S3
   Upload --> CeleryWorker
-  CeleryWorker --> Parser --> Chunker --> EmbedWorker
+  CeleryWorker --> MD --> Chunker --> EmbedWorker
   EmbedWorker --> MorphWorker --> PG
 
   FastAPI --> Dense
@@ -61,7 +61,7 @@ flowchart TB
 
 ### 인덱싱
 
-1. Client → `POST /v1/documents` (multipart file)
+1. Client → `POST /v1/documents` (multipart file + **필수** `group_id`)
 2. API → S3 upload + PostgreSQL document record (status: pending)
 3. API → Celery `ingest_document` task enqueue
 4. Worker → parse → chunk → embed (BGE-M3) → Kiwi morph
@@ -74,7 +74,7 @@ flowchart TB
 2. API → query embedding (Redis cache check)
 3. Parallel: pgvector kNN + FTS (`ts_rank` on `tsv`, Kiwi morph query)
 4. RRF fuse → Cross-encoder rerank top-5
-5. Build context (4096 token budget) → LLM generate
+5. Build context (청크 전문, tiktoken 4096 예산, 마지막만 자름) → LLM generate
 6. Response: answer + citations[] + latency_ms (`backend: "pgvector"`)
 
 ## PostgreSQL `chunks` 스키마
@@ -105,7 +105,8 @@ WHERE id = :chunk_id;
 
 | 컬럼 | 타입 | 용도 |
 |------|------|------|
-| `content` | text | 원문 (citation snippet) |
+| `group_id` | varchar(128) | 소속 그룹 복제 (정확 일치 필터) |
+| `content` | text | 원문 (LLM 컨텍스트 전문, API snippet은 미리보기) |
 | `content_morph` | text | Kiwi 형태소 분석 결과 |
 | `embedding` | vector(1024) | Dense kNN (cosine, HNSW) |
 | `tsv` | tsvector | Sparse FTS (`plainto_tsquery('simple', …)`) |
@@ -118,11 +119,15 @@ WHERE id = :chunk_id;
 src/rag/
 ├── api/              # FastAPI app, routes, middleware
 │   ├── main.py       # lifespan, health/ready/metrics
-│   ├── routes.py     # /v1/* endpoints
+│   ├── routes.py     # /v1/documents, retrieve, query
+│   ├── groups.py     # /v1/groups CRUD
 │   └── middleware.py # API key, rate limit
+├── groups/
+│   ├── filter.py     # retrieve SQL 필터
+│   └── service.py    # CRUD, 삭제 정책
 ├── ingestion/
-│   ├── parsers.py    # PDF, MD, HTML, TXT
-│   ├── chunker.py    # SemanticChunker
+│   ├── markdown.py   # MarkItDown / 경로 B 패스스루
+│   ├── chunker.py    # SemanticChunker (헤딩·표)
 │   └── pipeline.py   # IngestionPipeline
 ├── retrieval/
 │   ├── embeddings.py # BGE-M3, reranker, cache
@@ -138,7 +143,7 @@ src/rag/
 ├── workers/
 │   └── celery_app.py
 ├── db/
-│   ├── models.py     # Document, Chunk, IngestJob
+│   ├── models.py     # Group, Document, Chunk, IngestJob
 │   └── session.py
 ├── storage/
 │   └── s3.py
@@ -149,41 +154,52 @@ src/rag/
 └── config.py
 ```
 
-## Ingest / RAG 분리
+## 파싱 경계 · 적재는 이 저장소
 
-Ingest를 별도 프로젝트로 운영할 때 (pgvector 단일 DB):
+원본 파싱만 외부로 둘 수 있다. chunk/embed/PG 적재와 retrieve는 여기 남는다 (ADR-0008).
 
 ```mermaid
 flowchart LR
-  subgraph ingest_svc [Ingest Service]
-    Upload[Upload / Parse / Chunk]
-    IndexWrite[Embed + Kiwi morph → PG]
+  subgraph entry [진입점]
+    A[POST /v1/documents 원본]
+    B[POST /v1/documents/parsed]
   end
 
-  subgraph rag_svc [RAG Service - this repo]
+  subgraph parse [파싱]
+    MD[MarkItDown 이 저장소]
+    Ext[외부 파서]
+  end
+
+  subgraph load [적재 - 이 저장소]
+    Chunk[Chunk + Embed + Kiwi]
+  end
+
+  subgraph rag_svc [검색]
     Retrieve[POST /v1/retrieve]
     Query[POST /v1/query]
   end
 
   PG[(PostgreSQL documents + chunks)]
 
-  Upload --> IndexWrite --> PG
+  A --> MD --> Chunk
+  Ext -->|Markdown| B --> Chunk
+  Chunk --> PG
   Retrieve --> PG
   Query --> Retrieve
 ```
 
-- ingest: `documents` INSERT + `chunks` INSERT + `embedding`/`content_morph`/`tsv` UPDATE
-- RAG: `chunks` JOIN `documents`로 dense/sparse 검색 및 citation (`source`, `filename`, `page`)
-- **공유 PostgreSQL 필수** — 별도 검색 엔진 없음 (ADR-0002)
+- 경로 A: 원본 → MarkItDown → 공통 적재
+- 경로 B: 외부 Markdown → 공통 적재 (PG 직접 write 없음)
+- 검색: `chunks` JOIN `documents` (`filename`, `page`, `group_id`)
 
-계약·체크리스트: [INGEST_BOUNDARY.md](INGEST_BOUNDARY.md)
+계약: [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md)
 
 ## 확장 포인트
 
 | 확장 | 방법 |
 |------|------|
-| 새 문서 포맷 | `ingestion/parsers.py`에 Parser 추가 |
+| 새 문서 포맷 | 경로 A MarkItDown extras, 또는 경로 B 외부 파서 |
 | 새 embedding 모델 | `EMBEDDING_MODEL` env + `vector(N)` dimension 변경 |
 | LLM provider 교체 | `LLM_BASE_URL` + `LLM_API_KEY` |
-| Tenant 격리 | `tenant_id` filter (현재) → schema-per-tenant (Phase 2) |
+| Tenant 격리 | `group_id` 정확 일치 (현재) → schema-per-tenant (Phase 2) |
 | Dense 전용 스토어 | Qdrant 분리 + RRF 유지 (Phase 3) |
