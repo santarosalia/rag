@@ -66,7 +66,7 @@ multipart:
 
 이후: S3 원본 저장 → worker에서 MarkItDown → Markdown → 공통 적재.
 
-`filename` / `content_type` / `content_hash`는 **원본** 기준 (citation·중복 감지).
+`filename` / `content_type`은 **원본** 기준 (citation).
 
 ### 3.2 `POST /v1/documents/parsed` — 파싱 결과 수신 (경로 B)
 
@@ -77,8 +77,7 @@ JSON:
   "group_id": "ga",
   "filename": "업무지침/2024/세무조사.pdf",
   "content_type": "application/pdf",
-  "markdown": "# 제목\n\n본문...",
-  "content_hash": "optional-sha256-of-original"
+  "markdown": "# 제목\n\n본문..."
 }
 ```
 
@@ -88,7 +87,6 @@ JSON:
 | `filename` | yes | citation용 **원본** 파일명 또는 논리 경로 |
 | `markdown` | yes | 파싱된 Markdown (빈 문자열 거부) |
 | `content_type` | no | 원본 MIME. 없으면 `text/markdown` |
-| `content_hash` | no | 있으면 **원본** 해시. 없으면 markdown 바이트 SHA256 |
 
 원본 파일은 이 API로 받지 않는다. 재파싱이 필요하면 경로 A로 다시 올린다.
 
@@ -116,7 +114,6 @@ Markdown
 | `group_id` | 소속 그룹 FK (**필수**) |
 | `filename` | citation (원본 파일명/논리 경로) |
 | `content_type` | 원본 MIME |
-| `content_hash` | 중복·변경 감지 |
 | `s3_key` | 경로 A: 원본. 경로 B: 변환 Markdown (`.md`) |
 | `parse_kind` | `original` (경로 A) / `markdown` (경로 B) |
 | `status` | **`completed`만 검색 대상** |

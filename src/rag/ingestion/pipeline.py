@@ -1,4 +1,3 @@
-import hashlib
 import uuid
 from datetime import UTC, datetime
 
@@ -79,7 +78,6 @@ class IngestionPipeline:
 
             for text_chunk, embedding in zip(all_text_chunks, embeddings, strict=True):
                 chunk_id = uuid.uuid4()
-                content_hash = hashlib.sha256(text_chunk.content.encode()).hexdigest()
 
                 db_chunk = Chunk(
                     id=chunk_id,
@@ -89,7 +87,6 @@ class IngestionPipeline:
                     content=text_chunk.content,
                     token_count=text_chunk.token_count,
                     page=text_chunk.page,
-                    content_hash=content_hash,
                 )
                 db_chunks.append(db_chunk)
 
@@ -104,7 +101,6 @@ class IngestionPipeline:
                         page=text_chunk.page,
                         chunk_index=text_chunk.chunk_index,
                         token_count=text_chunk.token_count,
-                        content_hash=content_hash,
                     )
                 )
 
@@ -147,7 +143,6 @@ async def create_document_record(
     *,
     filename: str,
     content_type: str,
-    content_hash: str,
     s3_key: str,
     group_id: str,
     parse_kind: str = "original",
@@ -155,7 +150,6 @@ async def create_document_record(
     document = Document(
         filename=filename,
         content_type=content_type,
-        content_hash=content_hash,
         s3_key=s3_key,
         group_id=group_id,
         parse_kind=parse_kind,
@@ -164,10 +158,9 @@ async def create_document_record(
     session.add(document)
     await session.flush()
 
-    idempotency_key = f"{document.id}:{content_hash}"
     job = IngestJob(
         doc_id=document.id,
-        idempotency_key=idempotency_key,
+        idempotency_key=str(document.id),
         status=JobStatus.PENDING,
     )
     session.add(job)

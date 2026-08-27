@@ -23,7 +23,7 @@ from rag.models.schemas import (
 )
 from rag.observability.metrics import QUERY_COUNTER
 from rag.retrieval.pipeline import RetrievalPipeline
-from rag.storage.s3 import ObjectStorage, compute_content_hash
+from rag.storage.s3 import ObjectStorage
 
 
 def _enqueue_ingest(doc_id: str, job_id: str):
@@ -59,14 +59,12 @@ async def upload_document(
 
     await require_group(db, group_id)
 
-    content_hash = compute_content_hash(data)
     storage = ObjectStorage()
 
     document, job = await create_document_record(
         db,
         filename=file.filename,
         content_type=file.content_type or "application/octet-stream",
-        content_hash=content_hash,
         s3_key="pending",
         group_id=group_id,
     )
@@ -101,14 +99,12 @@ async def upload_parsed_document(
     await require_group(db, body.group_id)
 
     data = markdown.encode("utf-8")
-    content_hash = body.content_hash or compute_content_hash(data)
     storage = ObjectStorage()
 
     document, job = await create_document_record(
         db,
         filename=filename,
         content_type=body.content_type or "text/markdown",
-        content_hash=content_hash,
         s3_key="pending",
         group_id=body.group_id,
         parse_kind="markdown",

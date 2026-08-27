@@ -148,7 +148,6 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 | id | UUID | 문서 ID |
 | group_id | string | 소속 그룹 FK (**필수**, UUID 아님) |
 | filename | string | 원본 파일명 (citation 표시) |
-| content_hash | SHA256 | 중복/변경 감지 |
 | status | enum | pending → processing → completed / failed |
 | chunk_count | int | 인덱싱된 청크 수 |
 
@@ -167,8 +166,7 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 
 ### 3.5 Idempotency
 
-- Idempotency key = `{doc_id}:{content_hash}`
-- 동일 내용 재업로드 시 중복 인덱싱 방지
+- Idempotency key = `{doc_id}` (같은 문서 잡의 재시도)
 - Celery retry: max 3회, exponential backoff
 
 ---

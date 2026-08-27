@@ -55,7 +55,6 @@ class Document(Base):
     )
     filename: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(128))
-    content_hash: Mapped[str] = mapped_column(String(64), index=True)
     s3_key: Mapped[str] = mapped_column(String(1024))
     parse_kind: Mapped[str] = mapped_column(String(16), default="original", nullable=False)
     status: Mapped[DocumentStatus] = mapped_column(
@@ -101,7 +100,6 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer, default=0)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    content_hash: Mapped[str] = mapped_column(String(64))
     content_morph: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
