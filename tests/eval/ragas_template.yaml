@@ -1,0 +1,68 @@
+# RAGAS evaluation dataset template
+#
+# Usage:
+#   rag-eval tests/eval/ragas_template.yaml
+#   rag-eval tests/eval/ragas_template.yaml --output results/ragas_run.json
+#   rag-eval tests/eval/ragas_template.yaml --runner api --api-url http://localhost:7500
+#   rag-eval tests/eval/ragas_template.yaml --dry-run
+#
+# Prerequisites:
+#   - RAG stack up (Postgres + indexed corpus for your group_id)
+#   - LLM_API_KEY / LLM_BASE_URL for generation AND RAGAS judge
+#   - pip install -e ".[dev]"
+#
+# Runner:
+#   direct — in-process QueryService (full chunk text → better faithfulness)
+#   api    — HTTP POST /v1/query (citation snippets only; faster to wire, weaker faithfulness)
+#
+# Metrics (defaults.metrics):
+#   faithfulness        — answer grounded in retrieved contexts (no ground_truth)
+#   answer_relevancy    — answer addresses the question (needs embeddings API)
+#   context_recall      — ground_truth covered by contexts (needs ground_truth)
+#   context_precision   — retrieved contexts useful vs ground_truth (needs ground_truth)
+
+name: ragas-eval-template
+description: Copy this file and replace items with your domain Q&A pairs.
+
+defaults:
+  runner: direct
+  api_url: http://localhost:8000
+  group_id: null
+  top_k: 5
+  include_citations: true
+
+  metrics:
+    - faithfulness
+    - context_recall
+    - context_precision
+
+  thresholds:
+    faithfulness: 0.70
+    context_recall: 0.70
+    context_precision: 0.70
+    answer_relevancy: 0.70
+
+  judge:
+    model: gpt-4o-mini
+    base_url: null
+    api_key_env: LLM_API_KEY
+    temperature: 0.0
+
+  embeddings:
+    model: text-embedding-3-small
+    base_url: null
+    api_key_env: LLM_API_KEY
+
+items:
+  - id: example-1
+    question: 하이브리드 검색이란 무엇인가요?
+    ground_truth: |
+      Dense(의미) 벡터 검색과 Sparse(키워드) 검색을 RRF로 결합해
+      recall을 높이는 검색 방식입니다.
+    group_id: null
+
+  - id: example-2
+    question: 1기분 자동차세는 몇 월에 부과하나요?
+    ground_truth: |
+      1기분 자동차세는 6월에 부과·징수하며, 납기는 6월 16일부터 30일까지입니다.
+    group_id: dc
