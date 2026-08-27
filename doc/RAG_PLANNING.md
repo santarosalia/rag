@@ -147,7 +147,7 @@ Markdown ATX 헤딩(`#`–`######`)·파이프 표·코드 펜스·HTML 표 경�
 |------|------|------|
 | id | UUID | 청크 고유 ID |
 | doc_id | UUID | 문서 FK |
-| content | text | 원문 (citation snippet) |
+| content | text | 원문 (LLM 컨텍스트 전문, API snippet은 미리보기) |
 | content_morph | text | Kiwi 형태소 분석 결과 |
 | embedding | vector(1024) | Dense kNN (HNSW) |
 | tsv | tsvector | FTS sparse 검색 (GIN) |
@@ -214,7 +214,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 ### 4.6 Generation (LLM)
 
 - **Provider:** OpenAI-compatible API (설정 교체 가능)
-- **Context budget:** 4096 tokens
+- **Context budget:** 4096 tokens (tiktoken `cl100k_base`). 청크 **전문**을 순위대로 넣고 넘치면 마지막만 자른다. API `snippet`은 미리보기(300자)만.
 - **Citation format:** `[1]`, `[2]` — context 번호와 매칭
 - **System prompt:** context 기반 답변, 정보 부족 시 명시, 질문 언어로 답변
 
@@ -414,6 +414,7 @@ deploy/k8s/rag.yaml
 ### 10.3 Golden Set
 
 `tests/eval/test_benchmark.py`에 fusion benchmark golden set 포함.  
+세무과 매뉴얼 DocuOps 질의 세트: [`tests/eval/DOCUOPS_TAX.md`](../tests/eval/DOCUOPS_TAX.md) · [`docuops_tax.yaml`](../tests/eval/docuops_tax.yaml).  
 CI에서 Recall@5, MRR threshold gate.
 
 ---

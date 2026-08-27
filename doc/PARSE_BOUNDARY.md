@@ -138,7 +138,7 @@ Markdown
 |------|----------|
 | `id` / `doc_id` | citation, 삭제 |
 | `group_id` | 그룹 필터 |
-| `content` | rerank, LLM, snippet |
+| `content` | rerank, LLM 컨텍스트 (전문). API `snippet`은 미리보기 |
 | `embedding` | Dense kNN |
 | `content_morph` / `tsv` | Sparse FTS |
 

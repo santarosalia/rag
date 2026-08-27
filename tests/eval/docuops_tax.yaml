@@ -1,0 +1,104 @@
+# DocuOps 세무과 매뉴얼 벤치마크 (keyword gold)
+# 채점: 각 must_include 항목이 답변에 나타나면 1점. aliases 중 하나면 충분.
+corpus: 세무과 업무 매뉴얼
+endpoint: POST /v1/query
+top_k: 5
+include_citations: true
+
+items:
+  - id: 1
+    category: 부과 시기
+    optimized: 1기분 자동차세는 몇 월에 부과하나요?
+    user: 자동차세 1기분 고지서는 보통 언제 나오나요?
+    must_include:
+      - text: 6월
+        aliases: ["6 월", "6월에"]
+
+  - id: 2
+    category: 세액·납기
+    optimized: 주민세 개인분의 세액과 납부 기간은 어떻게 되나요?
+    user: 개인 주민세는 얼마고 언제까지 내면 돼요?
+    must_include:
+      - text: 10,000원
+        aliases: ["10000원", "10,000 원", "1만 원", "1만원"]
+      - text: 8월 16일~31일
+        aliases: ["8. 16 ~ 31", "8.16~31", "8월 16일부터 31일", "8월 16~31일"]
+
+  - id: 3
+    category: 부과 항목
+    optimized: 재산세는 7월과 9월에 각각 어떤 항목을 부과하나요?
+    user: 재산세 고지서가 7월이랑 9월에 나뉘어 나오던데, 각각 뭐에 대한 세금인가요?
+    must_include:
+      - text: 7월 주택분 50%·건축물분
+        aliases: ["7월", "주택분 50%", "건축물"]
+      - text: 9월 주택분 50%·토지분
+        aliases: ["9월", "토지분"]
+    notes: 7월·9월 항목이 한 답에 같이 있어야 한다. 주택 1/2 표기도 허용.
+
+  - id: 4
+    category: 과세기준일
+    optimized: 정기분 등록면허세의 과세기준일은 언제인가요?
+    user: 면허가 있으면 어느 날짜를 기준으로 등록면허세가 부과되나요?
+    must_include:
+      - text: 매년 1월 1일
+        aliases: ["1월 1일", "1. 1.", "1.1"]
+
+  - id: 5
+    category: 대상·주기
+    optimized: 건축물 취득세 안내문 발송 업무의 처리 대상과 추진주기는 무엇인가요?
+    user: 이번 달 준공 건축물 중 취득세를 안 낸 사람들에게 안내하려는데, 이 업무는 매달 하는 건가요?
+    must_include:
+      - text: 취득세 미신고자
+        aliases: ["미신고", "자진신고 안내"]
+      - text: 매월
+        aliases: ["매달", "월별"]
+
+  - id: 6
+    category: 시스템 화면
+    optimized: 건축물 취득세 안내문 발송 전 납세자 주소를 확인하는 시스템 화면은 무엇인가요?
+    user: 취득세 안내문 보내기 전에 주소가 맞는지 어디서 확인하면 되나요?
+    must_include:
+      - text: "[5112]"
+        aliases: ["5112"]
+      - text: 납세자조회
+        aliases: ["납세자 조회", "주소"]
+
+  - id: 7
+    category: 소유자 확인
+    optimized: 상속 대상 부동산의 실제 소유자를 최종 확인하는 시스템 화면은 무엇인가요?
+    user: 상속 대상이라고 조회된 부동산이 실제로 돌아가신 분 소유였는지는 어디서 확인하죠?
+    must_include:
+      - text: "[4525]"
+        aliases: ["4525"]
+      - text: 대법원등기부
+        aliases: ["등기부", "대법원 등기부"]
+
+  - id: 8
+    category: 기준일 적용
+    optimized: 재산세 토지분의 과세기준일과 납세의무자는 어떻게 되나요?
+    user: 6월 1일 전에 토지를 팔았다면 그해 토지분 재산세는 매도인과 매수인 중 누가 내나요?
+    must_include:
+      - text: 6월 1일
+        aliases: ["6. 1.", "6.1"]
+      - text: 매수인
+        aliases: ["현재 토지 소유자", "과세기준일 현재 소유자"]
+
+  - id: 9
+    category: 영치 기준
+    optimized: 지방세 체납차량의 번호판 영치 대상 기준은 무엇인가요?
+    user: 자동차세가 몇 번 밀리면 번호판을 떼어갈 수 있나요?
+    must_include:
+      - text: 자동차세 2회 이상
+        aliases: ["2회 이상", "체납 2회"]
+      - text: 징수촉탁 3회 이상
+        aliases: ["촉탁 3회", "3회 이상"]
+
+  - id: 10
+    category: 조사 규모·기간
+    optimized: 정기 법인 세무조사의 조사 대상 수와 조사 기간은 어떻게 되나요?
+    user: 올해 법인 정기 세무조사는 몇 곳을 대상으로 언제 진행해요?
+    must_include:
+      - text: 40개 법인
+        aliases: ["40개", "40 개"]
+      - text: 4월~11월
+        aliases: ["4월 ~ 11월", "4~11월", "4월부터 11월"]

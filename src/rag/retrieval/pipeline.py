@@ -112,7 +112,7 @@ class RetrievalPipeline:
         citations = []
         for rank, hit in enumerate(hits, start=1):
             score = hit.get("rerank_score", hit.get("rrf_score", hit.get("score", 0.0)))
-            content = hit.get("content", "")
+            content = hit.get("content", "") or ""
             snippet = content[:300] + ("..." if len(content) > 300 else "")
             citations.append(
                 Citation(
@@ -123,6 +123,7 @@ class RetrievalPipeline:
                     score=float(score),
                     snippet=snippet,
                     rank=rank,
+                    content=content,
                 )
             )
         return citations

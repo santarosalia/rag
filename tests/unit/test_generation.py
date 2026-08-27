@@ -24,7 +24,29 @@ def test_build_context_respects_budget():
         ),
     ]
     context = build_context(citations, max_tokens=100)
-    assert len(context) < 1000
+    assert "B" not in context
+    assert "[1]" in context
+
+
+def test_build_context_uses_full_content_not_snippet():
+    citations = [
+        Citation(
+            chunk_id="1",
+            doc_id="d1",
+            filename="f1.txt",
+            page=None,
+            score=0.9,
+            snippet="short preview",
+            rank=1,
+            content="full table body with the actual numbers 12345",
+        ),
+    ]
+    context = build_context(citations, max_tokens=4096)
+    assert "12345" in context
+    assert "short preview" not in context
+    dumped = citations[0].model_dump()
+    assert "content" not in dumped
+    assert dumped["snippet"] == "short preview"
 
 
 def test_build_context_numbering():

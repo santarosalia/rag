@@ -1,3 +1,4 @@
+from rag.config import get_settings
 from rag.generation.llm import LLMGenerator, build_context
 from rag.models.schemas import QueryResponse
 from rag.retrieval.pipeline import RetrievalPipeline
@@ -25,7 +26,10 @@ class QueryService:
             rerank=True,
         )
 
-        context = build_context(citations)
+        max_tokens = get_settings().yaml_config.get("retrieval", {}).get(
+            "context_max_tokens", 4096
+        )
+        context = build_context(citations, max_tokens=max_tokens)
         answer = await self.llm.generate(query, context)
 
         return QueryResponse(

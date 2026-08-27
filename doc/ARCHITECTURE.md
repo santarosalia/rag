@@ -74,7 +74,7 @@ flowchart TB
 2. API → query embedding (Redis cache check)
 3. Parallel: pgvector kNN + FTS (`ts_rank` on `tsv`, Kiwi morph query)
 4. RRF fuse → Cross-encoder rerank top-5
-5. Build context (4096 token budget) → LLM generate
+5. Build context (청크 전문, tiktoken 4096 예산, 마지막만 자름) → LLM generate
 6. Response: answer + citations[] + latency_ms (`backend: "pgvector"`)
 
 ## PostgreSQL `chunks` 스키마
@@ -106,7 +106,7 @@ WHERE id = :chunk_id;
 | 컬럼 | 타입 | 용도 |
 |------|------|------|
 | `group_id` | varchar(128) | 소속 그룹 복제 (정확 일치 필터) |
-| `content` | text | 원문 (citation snippet) |
+| `content` | text | 원문 (LLM 컨텍스트 전문, API snippet은 미리보기) |
 | `content_morph` | text | Kiwi 형태소 분석 결과 |
 | `embedding` | vector(1024) | Dense kNN (cosine, HNSW) |
 | `tsv` | tsvector | Sparse FTS (`plainto_tsquery('simple', …)`) |

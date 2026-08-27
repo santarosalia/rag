@@ -69,6 +69,7 @@ class Citation(BaseModel):
     score: float
     snippet: str
     rank: int
+    content: str = Field(default="", exclude=True)
 
 
 class RetrieveResponse(BaseModel):
