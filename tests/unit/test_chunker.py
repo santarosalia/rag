@@ -51,6 +51,44 @@ def test_chunker_keeps_markdown_table_in_one_chunk():
     assert "| 3 | 4 |" in chunks[0].content
 
 
+def test_chunker_keeps_fenced_code_with_blank_lines():
+    chunker = SemanticChunker(max_tokens=512, overlap_tokens=0, min_chunk_tokens=1)
+    fence = "```python\nprint(1)\n\nprint(2)\n```"
+    chunks = chunker.chunk(f"# T\n\n{fence}")
+    assert len(chunks) == 1
+    assert "print(1)" in chunks[0].content
+    assert "print(2)" in chunks[0].content
+    assert chunks[0].content.count("```") == 2
+
+
+def test_heading_inside_fence_is_not_a_section():
+    chunker = SemanticChunker(max_tokens=512, overlap_tokens=0, min_chunk_tokens=1)
+    text = "```\n# not heading\n```\n\n# Real\n\nbody"
+    chunks = chunker.chunk(text)
+    joined = "\n\n".join(c.content for c in chunks)
+    assert "```\n# not heading\n```" in joined
+    assert any("# Real" in c.content for c in chunks)
+
+
+def test_chunker_keeps_html_table_with_blank_lines():
+    chunker = SemanticChunker(max_tokens=512, overlap_tokens=0, min_chunk_tokens=1)
+    html = "<table>\n<tr>\n\n<td>a</td>\n</tr>\n</table>"
+    chunks = chunker.chunk(f"# T\n\n{html}")
+    assert len(chunks) == 1
+    assert "<table>" in chunks[0].content
+    assert "<td>a</td>" in chunks[0].content
+    assert "</table>" in chunks[0].content
+
+
+def test_oversized_fence_stays_one_chunk():
+    chunker = SemanticChunker(max_tokens=30, overlap_tokens=0, min_chunk_tokens=1)
+    text = "```\n" + ("word " * 80) + "\n```"
+    chunks = chunker.chunk(text)
+    assert len(chunks) == 1
+    assert chunks[0].content.startswith("```")
+    assert chunks[0].content.endswith("```")
+
+
 def _fill(chunker: SemanticChunker, at_least: int, at_most: int) -> str:
     words = ["alpha"]
     while chunker.count_tokens(" ".join(words)) < at_least:

@@ -5,6 +5,27 @@ import tiktoken
 
 _HEADING = re.compile(r"(?m)^#{1,6}\s+")
 _TABLE_LINE = re.compile(r"^\s*\|.*\|\s*$")
+_FENCE_OPEN = re.compile(r"^( {0,3})(`{3,}|~{3,})")
+_HTML_TABLE_OPEN = re.compile(r"<table\b", re.IGNORECASE)
+_HTML_TABLE_CLOSE = re.compile(r"</table\s*>", re.IGNORECASE)
+
+
+def _parse_fence_open(line: str) -> tuple[str, int] | None:
+    match = _FENCE_OPEN.match(line)
+    if not match:
+        return None
+    marker = match.group(2)
+    return marker[0], len(marker)
+
+
+def _is_fence_close(line: str, fence: tuple[str, int]) -> bool:
+    char, length = fence
+    pattern = rf"^( {{0,3}})({re.escape(char)}{{{length},}})[ \t]*$"
+    return re.match(pattern, line) is not None
+
+
+def _html_table_delta(line: str) -> int:
+    return len(_HTML_TABLE_OPEN.findall(line)) - len(_HTML_TABLE_CLOSE.findall(line))
 
 
 @dataclass
@@ -74,7 +95,7 @@ class SemanticChunker:
         for section in self._split_heading_sections(text):
             for block in self._markdown_blocks(section):
                 block_tokens = self.count_tokens(block)
-                if self._is_table_block(block):
+                if self._is_atomic_block(block):
                     if current_tokens + block_tokens > self.max_tokens and current_parts:
                         flush()
                     current_parts.append(block)
@@ -121,18 +142,43 @@ class SemanticChunker:
             token_count=self.count_tokens(content),
         )
 
+    def _heading_offsets(self, text: str) -> list[int]:
+        """ATX heading starts outside fenced code and HTML tables."""
+        cuts: list[int] = []
+        offset = 0
+        fence: tuple[str, int] | None = None
+        table_depth = 0
+        for line in text.split("\n"):
+            if fence is not None:
+                if _is_fence_close(line, fence):
+                    fence = None
+            elif table_depth > 0:
+                table_depth = max(0, table_depth + _html_table_delta(line))
+            else:
+                opened = _parse_fence_open(line)
+                if opened:
+                    fence = opened
+                else:
+                    delta = _html_table_delta(line)
+                    if _HTML_TABLE_OPEN.search(line):
+                        table_depth = max(0, delta)
+                    elif _HEADING.match(line):
+                        cuts.append(offset)
+            offset += len(line) + 1
+        return cuts
+
     def _split_heading_sections(self, text: str) -> list[str]:
-        matches = list(_HEADING.finditer(text))
-        if not matches:
+        cuts = self._heading_offsets(text)
+        if not cuts:
             return [text]
         sections: list[str] = []
-        if matches[0].start() > 0:
-            prefix = text[: matches[0].start()].strip()
+        if cuts[0] > 0:
+            prefix = text[: cuts[0]].strip()
             if prefix:
                 sections.append(prefix)
-        for i, match in enumerate(matches):
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-            section = text[match.start() : end].strip()
+        for i, start in enumerate(cuts):
+            end = cuts[i + 1] if i + 1 < len(cuts) else len(text)
+            section = text[start:end].strip()
             if section:
                 sections.append(section)
         return sections
@@ -140,26 +186,59 @@ class SemanticChunker:
     def _markdown_blocks(self, section: str) -> list[str]:
         blocks: list[str] = []
         buf: list[str] = []
-        in_table = False
+        in_pipe_table = False
+        fence: tuple[str, int] | None = None
+        table_depth = 0
 
         def flush_buf() -> None:
-            nonlocal buf
+            nonlocal buf, in_pipe_table
             joined = "\n".join(buf).strip()
             if joined:
                 blocks.append(joined)
             buf = []
+            in_pipe_table = False
 
         for line in section.split("\n"):
-            is_table_line = bool(_TABLE_LINE.match(line))
-            if is_table_line:
-                if buf and not in_table:
+            if fence is not None:
+                buf.append(line)
+                if _is_fence_close(line, fence):
+                    fence = None
                     flush_buf()
-                in_table = True
+                continue
+
+            if table_depth > 0:
+                buf.append(line)
+                table_depth = max(0, table_depth + _html_table_delta(line))
+                if table_depth == 0:
+                    flush_buf()
+                continue
+
+            opened = _parse_fence_open(line)
+            if opened:
+                if buf:
+                    flush_buf()
+                fence = opened
                 buf.append(line)
                 continue
-            if in_table:
+
+            if _HTML_TABLE_OPEN.search(line):
+                if buf:
+                    flush_buf()
+                buf.append(line)
+                table_depth = max(0, _html_table_delta(line))
+                if table_depth == 0:
+                    flush_buf()
+                continue
+
+            is_table_line = bool(_TABLE_LINE.match(line))
+            if is_table_line:
+                if buf and not in_pipe_table:
+                    flush_buf()
+                in_pipe_table = True
+                buf.append(line)
+                continue
+            if in_pipe_table:
                 flush_buf()
-                in_table = False
             if not line.strip():
                 flush_buf()
             else:
@@ -171,6 +250,18 @@ class SemanticChunker:
     def _is_table_block(block: str) -> bool:
         lines = [line for line in block.split("\n") if line.strip()]
         return bool(lines) and all(_TABLE_LINE.match(line) for line in lines)
+
+    @classmethod
+    def _is_atomic_block(cls, block: str) -> bool:
+        stripped = block.strip()
+        if not stripped:
+            return False
+        if cls._is_table_block(block):
+            return True
+        first = stripped.split("\n", 1)[0]
+        if _parse_fence_open(first):
+            return True
+        return _HTML_TABLE_OPEN.search(stripped) is not None
 
     def _split_oversized(self, text: str) -> list[str]:
         sentences = re.split(r"(?<=[.!?。！？])\s+", text)

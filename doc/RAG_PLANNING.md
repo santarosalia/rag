@@ -126,7 +126,7 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 
 ### 3.3 Chunking 전략
 
-Markdown ATX 헤딩(`#`–`######`)·표 경계를 우선하는 Semantic Chunker (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
+Markdown ATX 헤딩(`#`–`######`)·파이프 표·코드 펜스·HTML 표 경계를 우선하는 Semantic Chunker (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
 `min_chunk_tokens` 미만 본문은 버리지 않고 이전 청크에 붙인다. 상세: [`CHUNKING.md`](CHUNKING.md).
 
 ### 3.4 메타데이터 스키마
