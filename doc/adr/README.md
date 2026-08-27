@@ -34,3 +34,4 @@
 - [그룹 기획](../GROUP_PLANNING.md)
 - [파싱 경계](../PARSE_BOUNDARY.md)
 - [청킹 규칙](../CHUNKING.md)
+- [parent-child 청킹 기획](../PARENT_CHILD_PLANNING.md)

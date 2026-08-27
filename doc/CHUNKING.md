@@ -4,7 +4,7 @@
 > **구현:** [`src/rag/ingestion/chunker.py`](../src/rag/ingestion/chunker.py) `SemanticChunker`  
 > **설정:** [`configs/default.yaml`](../configs/default.yaml) `chunking`
 
-관련: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) (입력은 Markdown) · [`RAG_PLANNING.md`](RAG_PLANNING.md) §3.3
+관련: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) (입력은 Markdown) · [`RAG_PLANNING.md`](RAG_PLANNING.md) §3.3 · 다음 단계 [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md)
 
 청커는 **원본 PDF/DOCX를 보지 않는다.** 경로 A(MarkItDown)든 경로 B(파싱본)든 합류점은 Markdown이다.
 
@@ -133,7 +133,7 @@ append 하면 이전 청크가 `max_tokens`를 조금 넘을 수 있다. 거대 
 ## 5. 하지 않는 것
 
 - 원본 페이지 번호 복원
-- Parent-child chunking (small 검색 → large context) — 기획 Phase 3
+- Parent-child · 거대 표 행 단위 — 아직 미구현. 기획: [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md)
 - 토큰 윈도우 슬라이딩 overlap
 - 인라인 코드·들여쓰기 코드(4칸)·깨진 HTML을 완벽 파싱
 

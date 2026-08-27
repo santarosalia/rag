@@ -127,7 +127,8 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 ### 3.3 Chunking 전략
 
 Markdown ATX 헤딩(`#`–`######`)·파이프 표·코드 펜스·HTML 표 경계를 우선하는 Semantic Chunker (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
-`min_chunk_tokens` 미만 본문은 버리지 않고 이전 청크에 붙인다. 상세: [`CHUNKING.md`](CHUNKING.md).
+`min_chunk_tokens` 미만 본문은 버리지 않고 이전 청크에 붙인다. 상세: [`CHUNKING.md`](CHUNKING.md).  
+다음: 검색=child / 생성=parent, 거대 표만 행 그룹 — [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md).
 
 ### 3.4 메타데이터 스키마
 
@@ -386,7 +387,7 @@ deploy/k8s/rag.yaml
 ### Phase 3 — 고급 기능
 
 - [ ] Query rewriting (HyDE, multi-query expansion)
-- [ ] Parent-child chunking (small chunk 검색 → large context 반환)
+- [ ] Parent-child chunking + 거대 표 행 그룹 ([`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md))
 - [ ] Freshness boost (time decay)
 - [ ] User feedback loop (thumbs up/down)
 - [ ] 전용 벡터 DB 분리 (billion-scale dense; OpenSearch 등 검색 엔진 분리도 선택지)
@@ -438,4 +439,5 @@ CI에서 Recall@5, MRR threshold gate.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
 - [adr/](adr/) — Architecture Decision Records
 - [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md) — 파싱 경계, 이중 진입점, 적재 계약
-- [CHUNKING.md](CHUNKING.md) — Semantic Chunker 분할 규칙
+- [CHUNKING.md](CHUNKING.md) — Semantic Chunker 분할 규칙 (현재 구현)
+- [PARENT_CHILD_PLANNING.md](PARENT_CHILD_PLANNING.md) — parent-child · 표 행 단위 (구현 대상)

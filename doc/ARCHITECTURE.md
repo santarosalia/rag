@@ -1,6 +1,6 @@
 # RAG 아키텍처 상세
 
-> [RAG 기획서](./RAG_PLANNING.md) · [그룹](./GROUP_PLANNING.md) · [청킹](./CHUNKING.md) · [ADR](./adr/)
+> [RAG 기획서](./RAG_PLANNING.md) · [그룹](./GROUP_PLANNING.md) · [청킹](./CHUNKING.md) · [parent-child 청킹](./PARENT_CHILD_PLANNING.md) · [ADR](./adr/)
 
 ## 컴포넌트 다이어그램
 

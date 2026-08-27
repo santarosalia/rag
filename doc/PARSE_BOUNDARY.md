@@ -267,4 +267,5 @@ A. ADR-0002로 제거. 없음.
 - [RAG_PLANNING.md](./RAG_PLANNING.md)
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
 - [CHUNKING.md](./CHUNKING.md) — Markdown 청킹 규칙
+- [PARENT_CHILD_PLANNING.md](./PARENT_CHILD_PLANNING.md) — parent-child · 표 행 단위 (구현 대상)
 - [adr/0002](./adr/0002-remove-opensearch-single-db-stack.md) · [adr/0005](./adr/0005-celery-redis-async-ingestion.md)
