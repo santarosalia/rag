@@ -54,7 +54,7 @@ docker compose exec api alembic upgrade head
 # 그룹 생성 (id는 호출측이 지정, UUID 아니어도 됨)
 curl -X POST http://localhost:8000/v1/groups \
   -H "Content-Type: application/json" \
-  -d '{"id": "ga", "name": "세무"}'
+  -d '{"id": "ga"}'
 
 # 업로드 (group_id 필수) — 경로 A
 curl -X POST http://localhost:8000/v1/documents \
@@ -86,7 +86,6 @@ curl -X POST http://localhost:8000/v1/query \
 | `POST /v1/groups` | 그룹 생성 (`id` 선택) |
 | `GET /v1/groups` | 목록 |
 | `GET /v1/groups/{id}` | 단건 |
-| `PATCH /v1/groups/{id}` | 이름 변경 |
 | `DELETE /v1/groups/{id}` | 빈 그룹만 삭제 |
 | `GET /v1/groups/{id}/documents` | 소속 문서 |
 | `POST /v1/documents` | 원본 업로드 (`group_id` 필수) → MarkItDown → 적재 |

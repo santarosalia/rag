@@ -10,14 +10,12 @@ from rag.groups.service import (
     list_group_documents,
     list_groups,
     to_group_response,
-    update_group,
 )
 from rag.models.schemas import (
     DocumentStatus,
     GroupCreate,
     GroupDocumentItem,
     GroupResponse,
-    GroupUpdate,
 )
 
 router = APIRouter(prefix="/groups")
@@ -28,7 +26,7 @@ async def create_group_endpoint(
     body: GroupCreate,
     db: AsyncSession = Depends(get_db),
 ) -> GroupResponse:
-    group = await create_group(db, name=body.name, group_id=body.id)
+    group = await create_group(db, group_id=body.id)
     return to_group_response(group)
 
 
@@ -49,19 +47,6 @@ async def get_group_endpoint(
     if group is None:
         raise HTTPException(status_code=404, detail="Group not found")
     return to_group_response(group)
-
-
-@router.patch("/{group_id}", response_model=GroupResponse)
-async def patch_group_endpoint(
-    group_id: str,
-    body: GroupUpdate,
-    db: AsyncSession = Depends(get_db),
-) -> GroupResponse:
-    group = await get_group(db, group_id)
-    if group is None:
-        raise HTTPException(status_code=404, detail="Group not found")
-    updated = await update_group(db, group, name=body.name)
-    return to_group_response(updated)
 
 
 @router.delete("/{group_id}", status_code=204)

@@ -249,7 +249,6 @@ score(chunk) = Σ  1 / (k + rank_i)
 | POST | `/v1/groups` | 그룹 생성 (`id` 선택, UUID 아니어도 됨) | 없음 |
 | GET | `/v1/groups` | 전체 목록 | 없음 |
 | GET | `/v1/groups/{id}` | 단건 | 없음 |
-| PATCH | `/v1/groups/{id}` | 이름 변경 | 없음 |
 | DELETE | `/v1/groups/{id}` | 빈 그룹만 삭제 | 없음 |
 | GET | `/v1/groups/{id}/documents` | 소속 문서 목록 | 없음 |
 | POST | `/v1/documents` | 문서 업로드 (`group_id` Form 필수) → ingest job | 없음 |

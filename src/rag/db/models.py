@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -32,10 +32,8 @@ def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
 
 class Group(Base):
     __tablename__ = "groups"
-    __table_args__ = (Index("uq_groups_name", "name", unique=True),)
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    name: Mapped[str] = mapped_column(String(256), nullable=False)
     slug: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

@@ -20,12 +20,12 @@ def test_retrieve_accepts_string_group_id():
 
 
 def test_group_create_optional_id():
-    body = GroupCreate(name="세무")
+    body = GroupCreate()
     assert body.id is None
-    body = GroupCreate(id="ga", name="세무")
+    body = GroupCreate(id="ga")
     assert body.id == "ga"
 
 
 def test_group_create_rejects_invalid_id():
     with pytest.raises(ValidationError):
-        GroupCreate(id="not valid", name="세무")
+        GroupCreate(id="not valid")

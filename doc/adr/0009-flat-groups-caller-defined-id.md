@@ -22,7 +22,7 @@ ADR-0007은 `tenant_id` 문자열 필터를 **자기참조 그룹 트리**로 �
 - 문서는 그룹 하나에만 속한다. 업로드 `group_id` 필수, 없는 그룹은 **400**. 기본 그룹 자동 생성 없음.
 - `chunks.group_id`만 복제한다. `group_path` / `include_descendants` / `parent_id` / `path` / `depth` 제거.
 - 검색: `group_id` 생략 시 전체, 있으면 `c.group_id = :group_id`.
-- 이름 전역 UNIQUE. ID 중복·이름 중복은 **409**.
+- 이름 컬럼 없음. ID가 곧 식별자. ID 중복은 **409**.
 - 삭제: 소속 문서가 있으면 **409** (RESTRICT).
 - 그룹 ID 변경 API는 두지 않는다 (문서·청크 FK).
 

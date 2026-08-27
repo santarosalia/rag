@@ -107,16 +107,10 @@ class ReadyResponse(BaseModel):
 
 class GroupCreate(BaseModel):
     id: GroupId | None = None
-    name: str = Field(..., min_length=1, max_length=256)
-
-
-class GroupUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=256)
 
 
 class GroupResponse(BaseModel):
     id: str
-    name: str
     slug: str | None = None
     created_at: datetime
     updated_at: datetime

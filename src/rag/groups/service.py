@@ -10,7 +10,6 @@ from rag.models.schemas import GroupResponse
 def to_group_response(group: Group) -> GroupResponse:
     return GroupResponse(
         id=group.id,
-        name=group.name,
         slug=group.slug,
         created_at=group.created_at,
         updated_at=group.updated_at,
@@ -44,27 +43,7 @@ async def resolve_search_group(session: AsyncSession, group_id: str | None) -> s
     return group.id
 
 
-async def _ensure_unique_name(
-    session: AsyncSession,
-    name: str,
-    *,
-    exclude_id: str | None = None,
-) -> None:
-    stmt = select(Group).where(Group.name == name)
-    if exclude_id is not None:
-        stmt = stmt.where(Group.id != exclude_id)
-    existing = (await session.execute(stmt)).scalar_one_or_none()
-    if existing is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="A group with this name already exists",
-        )
-
-
-async def create_group(session: AsyncSession, name: str, group_id: str | None = None) -> Group:
-    name = name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Group name is required")
+async def create_group(session: AsyncSession, group_id: str | None = None) -> Group:
     try:
         gid = resolve_create_id(group_id)
     except InvalidGroupId as e:
@@ -72,9 +51,8 @@ async def create_group(session: AsyncSession, name: str, group_id: str | None = 
 
     if await get_group(session, gid) is not None:
         raise HTTPException(status_code=409, detail="A group with this id already exists")
-    await _ensure_unique_name(session, name)
 
-    group = Group(id=gid, name=name)
+    group = Group(id=gid)
     session.add(group)
     await session.flush()
     await session.refresh(group)
@@ -82,7 +60,7 @@ async def create_group(session: AsyncSession, name: str, group_id: str | None = 
 
 
 async def list_groups(session: AsyncSession) -> list[Group]:
-    result = await session.execute(select(Group).order_by(Group.name))
+    result = await session.execute(select(Group).order_by(Group.id))
     return list(result.scalars().all())
 
 
@@ -91,23 +69,6 @@ async def list_group_documents(session: AsyncSession, group_id: str) -> list[Doc
         select(Document).where(Document.group_id == group_id).order_by(Document.created_at.desc())
     )
     return list(result.scalars().all())
-
-
-async def update_group(session: AsyncSession, group: Group, *, name: str | None) -> Group:
-    locked = await session.execute(select(Group).where(Group.id == group.id).with_for_update())
-    group = locked.scalar_one()
-
-    if name is not None:
-        next_name = name.strip()
-        if not next_name:
-            raise HTTPException(status_code=400, detail="Group name is required")
-        if next_name != group.name:
-            await _ensure_unique_name(session, next_name, exclude_id=group.id)
-        group.name = next_name
-
-    await session.flush()
-    await session.refresh(group)
-    return group
 
 
 async def delete_group(session: AsyncSession, group: Group) -> None:
