@@ -106,13 +106,14 @@ class IngestionPipeline:
 
             session.add_all(db_chunks)
             await session.flush()
-            # pgvector bulk_index UPDATEs in a separate session; rows must be committed first.
+            # Rows must be committed before UPDATE so the same worker session
+            # (or a later statement) can see them after DDL / a prior commit.
             await session.commit()
-            await self.search_backend.ensure_index()
+            await self.search_backend.ensure_index(session)
 
             for i in range(0, len(index_docs), self.batch_size):
                 batch = index_docs[i : i + self.batch_size]
-                success, errors = await self.search_backend.bulk_index(batch)
+                success, errors = await self.search_backend.bulk_index(batch, session)
                 if errors:
                     raise RuntimeError(f"Failed to index {errors} chunks")
 

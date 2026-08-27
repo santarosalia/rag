@@ -45,7 +45,22 @@ def get_sync_session() -> Session:
 
 
 def run_async(coro):
-    return asyncio.run(coro)
+    """Run a coroutine and dispose the process-global async engine first.
+
+    ``asyncio.run()`` closes the loop when it returns. Pooled asyncpg
+    connections from ``AsyncSessionLocal`` then fail on the next task with
+    ``Event loop is closed`` / ``Future attached to a different loop``.
+    """
+
+    async def _run():
+        try:
+            return await coro
+        finally:
+            from rag.db.session import engine as async_engine
+
+            await async_engine.dispose()
+
+    return asyncio.run(_run())
 
 
 @worker_process_init.connect
@@ -100,14 +115,14 @@ def delete_document_task(self, doc_id: str) -> dict:
     from rag.storage.s3 import ObjectStorage
 
     async def _delete():
+        from rag.db.session import worker_session
+
         backend = get_search_backend()
-        try:
-            deleted = await backend.delete_by_doc_id(doc_id)
-            await backend.close()
-            return deleted
-        except Exception:
-            await backend.close()
-            raise
+        async with worker_session() as session:
+            try:
+                return await backend.delete_by_doc_id(doc_id, session)
+            finally:
+                await backend.close()
 
     session = get_sync_session()
     try:
