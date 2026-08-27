@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from rag.generation.llm import LLMGenerator, build_context
 from rag.models.schemas import QueryResponse
 from rag.retrieval.pipeline import RetrievalPipeline
@@ -15,12 +17,16 @@ class QueryService:
     async def query(
         self,
         query: str,
-        tenant_id: str | None = None,
+        group_id: UUID | None = None,
+        include_descendants: bool = False,
+        group_path: str | None = None,
         top_k: int | None = None,
     ) -> QueryResponse:
         citations, latency = await self.retrieval.retrieve(
             query=query,
-            tenant_id=tenant_id,
+            group_id=group_id,
+            include_descendants=include_descendants,
+            group_path=group_path,
             top_k=top_k,
             rerank=True,
         )

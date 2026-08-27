@@ -14,7 +14,7 @@
 | **Ingest 프로젝트** | 업로드, 파싱, chunking, BGE-M3 embedding, Kiwi morph, PG 적재, 원본(S3) 보관 |
 | **RAG 프로젝트 (본 저장소)** | hybrid retrieve, rerank, LLM generate, citation |
 
-**메타데이터 유실 방지:** ingest가 `documents` 행과 `chunks` 검색 컬럼(`embedding`, `content_morph`, `tsv`)을 빠짐없이 채워야 citation·tenant 필터·검색이 동작한다.
+**메타데이터 유실 방지:** ingest가 `documents` 행과 `chunks` 검색 컬럼(`embedding`, `content_morph`, `tsv`)을 빠짐없이 채워야 citation·그룹 필터·검색이 동작한다.
 
 **중간 포맷:** 외부 ingest는 원본(PDF/DOCX/PPTX 등)을 **[MarkItDown](https://github.com/microsoft/markitdown)으로 Markdown 변환한 뒤** chunking하는 것을 **표준 파이프라인**으로 고정한다. RAG는 변환된 Markdown을 직접 받지 않고, ingest가 적재한 PostgreSQL만 읽는다.
 
@@ -26,8 +26,8 @@
 
 | 필드 | 용도 |
 |------|------|
-| `id` | doc_id — citation, 삭제, tenant 필터 기준키 |
-| `tenant_id` | 멀티테넌시 검색 필터 |
+| `id` | doc_id — citation, 삭제, 그룹 필터 기준키 |
+| `group_id` | 소속 그룹 FK (`groups.id`, **필수**) |
 | `filename` | citation 표시 (원본 파일명 또는 논리 경로) |
 | `content_type` | MIME (ingest·운영용) |
 | `content_hash` | 중복·변경 감지 |
@@ -40,7 +40,8 @@
 |------|----------------|
 | `id` | chunk_id (citation) |
 | `doc_id` | `documents` FK |
-| `tenant_id` | tenant 필터 (청크 레벨 복제) |
+| `group_id` | 검색 필터용 복제 (`documents.group_id`) |
+| `group_path` | 하위 그룹 포함 검색용 materialized path |
 | `content` | rerank, LLM context, snippet |
 | `page` | citation (PDF 등) |
 | `chunk_index`, `token_count`, `content_hash` | 운영·디버깅 |
@@ -50,7 +51,7 @@
 
 ingest 2단계 적재 (현재 monolith와 동일):
 
-1. `chunks` INSERT — `content`, `page`, `tenant_id` 등
+1. `chunks` INSERT — `content`, `page`, `group_id`, `group_path` 등
 2. `PgVectorBackend.bulk_index()` — `embedding`, `content_morph`, `tsv` UPDATE
 
 ### 2.3 RAG 검색 SQL (citation 메타 출처)
@@ -83,7 +84,7 @@ WHERE c.embedding IS NOT NULL
 | `filename`/`page` 누락 | citation 출처 표시 불가 (**핵심 리스크**) |
 | Kiwi morph 생략 (`content_morph`, `tsv` 불일치) | 한국어 sparse recall 저하 |
 | ingest가 자체 doc_id/chunk_id 체계 사용 | RAG 삭제·추적 불일치 |
-| `tenant_id` 누락 | tenant 격리 검색 무력화 |
+| `group_id`/`group_path` 누락 | 그룹 필터 검색 무력화 |
 
 ---
 
@@ -191,7 +192,7 @@ MarkItDown 기본 출력은 **단일 Markdown 스트림**이라 PDF **페이지 
 ```json
 {
   "doc_id": "uuid",
-  "tenant_id": "team-a",
+  "group_id": "uuid",
   "filename": "업무지침/2024/세무조사.pdf",
   "content_type": "application/pdf",
   "content_hash": "sha256...",
@@ -209,7 +210,8 @@ MarkItDown 기본 출력은 **단일 Markdown 스트림**이라 PDF **페이지 
 {
   "chunk_id": "uuid",
   "doc_id": "uuid",
-  "tenant_id": "team-a",
+  "group_id": "uuid",
+  "group_path": "/{root}/{...}/{leaf}",
   "chunk_index": 0,
   "content": "청크 본문",
   "token_count": 412,
@@ -238,7 +240,8 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 {
   "chunk_id": "uuid",
   "doc_id": "uuid",
-  "tenant_id": "team-a",
+  "group_id": "uuid",
+  "group_path": "/{root}/{...}/{leaf}",
   "content": "청크 본문",
   "embedding": [0.1, "..."],
   "filename": "업무지침/2024/세무조사.pdf",
@@ -289,7 +292,7 @@ ingest가 monolith ingest pipeline과 동일 API를 쓸 경우:
 - [ ] `documents.status = completed` **후** chunk embedding/tsv UPDATE
 - [ ] chunk INSERT → commit → embedding UPDATE 순서 (monolith와 동일)
 - [ ] citation 필수: `chunk_id`, `doc_id`, `filename`, `page`(nullable)
-- [ ] `tenant_id` 문서·청크 양쪽 기록
+- [ ] `group_id`·`group_path` 문서·청크 양쪽 기록
 - [ ] 삭제: `documents.status = deleted` + `chunks.embedding/content_morph/tsv = NULL`
 - [ ] MarkItDown 변환 + Markdown chunking 파이프라인 golden set CI
 - [ ] PDF page citation 필요 시 page 마커 또는 Doc Intelligence 적용

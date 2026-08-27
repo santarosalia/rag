@@ -44,3 +44,6 @@ rate_limit:
 
 search:
   sparse_analyzer: kiwi  # Kiwi morphological analyzer for Korean FTS
+
+groups:
+  max_depth: 8

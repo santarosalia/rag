@@ -2,11 +2,18 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from rag.api.main import create_app
+from rag.db.session import get_db
 
 
 @pytest.fixture
 def app():
-    return create_app()
+    application = create_app()
+
+    async def override_get_db():
+        yield None
+
+    application.dependency_overrides[get_db] = override_get_db
+    return application
 
 
 @pytest.mark.asyncio
@@ -18,6 +25,19 @@ async def test_health_endpoint(app):
         data = response.json()
         assert data["status"] == "ok"
         assert "version" in data
+
+
+@pytest.mark.asyncio
+async def test_upload_requires_group_id(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/documents",
+            files={"file": ("a.txt", b"hello", "text/plain")},
+            headers={"X-API-Key": "dev-api-key-change-me"},
+        )
+        assert response.status_code == 400
+        assert "group_id" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

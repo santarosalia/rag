@@ -1,5 +1,6 @@
 import time
 from typing import Any
+from uuid import UUID
 
 from rag.config import get_settings
 from rag.indexing.factory import get_search_backend
@@ -36,7 +37,9 @@ class RetrievalPipeline:
         self,
         query: str,
         mode: SearchMode = SearchMode.HYBRID,
-        tenant_id: str | None = None,
+        group_id: UUID | None = None,
+        include_descendants: bool = False,
+        group_path: str | None = None,
         top_k: int | None = None,
         rerank: bool = True,
     ) -> tuple[list[Citation], dict[str, float]]:
@@ -57,7 +60,11 @@ class RetrievalPipeline:
         if mode in (SearchMode.DENSE, SearchMode.HYBRID):
             t0 = time.perf_counter()
             dense_hits = await self.search_backend.knn_search(
-                embedding, k=dense_k, tenant_id=tenant_id
+                embedding,
+                k=dense_k,
+                group_id=group_id,
+                include_descendants=include_descendants,
+                group_path=group_path,
             )
             latency["dense_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="dense").observe(latency["dense_ms"] / 1000)
@@ -68,7 +75,11 @@ class RetrievalPipeline:
         if mode in (SearchMode.SPARSE, SearchMode.HYBRID):
             t0 = time.perf_counter()
             sparse_hits = await self.search_backend.bm25_search(
-                query, k=sparse_k, tenant_id=tenant_id
+                query,
+                k=sparse_k,
+                group_id=group_id,
+                include_descendants=include_descendants,
+                group_path=group_path,
             )
             latency["sparse_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="sparse").observe(latency["sparse_ms"] / 1000)

@@ -6,7 +6,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag.config import get_settings
-from rag.db.models import Chunk, Document, DocumentStatus, IngestJob, JobStatus
+from rag.db.models import Chunk, Document, DocumentStatus, Group, IngestJob, JobStatus
 from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
 from rag.ingestion.chunker import SemanticChunker
@@ -40,10 +40,17 @@ class IngestionPipeline:
         session: AsyncSession,
         doc_id: uuid.UUID,
     ) -> int:
-        result = await session.execute(select(Document).where(Document.id == doc_id))
+        result = await session.execute(
+            select(Document).where(Document.id == doc_id)
+        )
         document = result.scalar_one_or_none()
         if not document or document.status == DocumentStatus.DELETED:
             raise ValueError(f"Document {doc_id} not found or deleted")
+
+        group_result = await session.execute(select(Group).where(Group.id == document.group_id))
+        group = group_result.scalar_one_or_none()
+        if group is None:
+            raise ValueError(f"Group {document.group_id} not found for document {doc_id}")
 
         document.status = DocumentStatus.PROCESSING
         await session.flush()
@@ -77,7 +84,8 @@ class IngestionPipeline:
                 db_chunk = Chunk(
                     id=chunk_id,
                     doc_id=document.id,
-                    tenant_id=document.tenant_id,
+                    group_id=document.group_id,
+                    group_path=group.path,
                     chunk_index=text_chunk.chunk_index,
                     content=text_chunk.content,
                     token_count=text_chunk.token_count,
@@ -92,7 +100,8 @@ class IngestionPipeline:
                         doc_id=str(document.id),
                         content=text_chunk.content,
                         embedding=embedding,
-                        tenant_id=document.tenant_id,
+                        group_id=str(document.group_id),
+                        group_path=group.path,
                         filename=document.filename,
                         page=text_chunk.page,
                         chunk_index=text_chunk.chunk_index,
@@ -142,14 +151,14 @@ async def create_document_record(
     content_type: str,
     content_hash: str,
     s3_key: str,
-    tenant_id: str | None = None,
+    group_id: uuid.UUID,
 ) -> tuple[Document, IngestJob]:
     document = Document(
         filename=filename,
         content_type=content_type,
         content_hash=content_hash,
         s3_key=s3_key,
-        tenant_id=tenant_id,
+        group_id=group_id,
         status=DocumentStatus.PENDING,
     )
     session.add(document)

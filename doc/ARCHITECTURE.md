@@ -185,5 +185,5 @@ flowchart LR
 | 새 문서 포맷 | `ingestion/parsers.py`에 Parser 추가 |
 | 새 embedding 모델 | `EMBEDDING_MODEL` env + `vector(N)` dimension 변경 |
 | LLM provider 교체 | `LLM_BASE_URL` + `LLM_API_KEY` |
-| Tenant 격리 | `tenant_id` filter (현재) → schema-per-tenant (Phase 2) |
+| Tenant 격리 | `group_id` / `group_path` 필터 (현재) → schema-per-tenant (Phase 2) |
 | Dense 전용 스토어 | Qdrant 분리 + RRF 유지 (Phase 3) |

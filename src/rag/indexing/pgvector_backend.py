@@ -1,8 +1,10 @@
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import text
 
 from rag.db.session import AsyncSessionLocal
+from rag.groups.filter import group_filter_clause
 from rag.indexing.morphology import get_morph_analyzer
 from rag.observability.logging import get_logger
 
@@ -119,11 +121,14 @@ class PgVectorBackend:
         self,
         embedding: list[float],
         k: int = 50,
-        tenant_id: str | None = None,
+        group_id: UUID | None = None,
+        include_descendants: bool = False,
+        group_path: str | None = None,
     ) -> list[dict[str, Any]]:
         embedding_literal = "[" + ",".join(str(v) for v in embedding) + "]"
-
-        tenant_clause = "AND c.tenant_id = :tenant_id" if tenant_id else ""
+        group_clause, group_params = group_filter_clause(
+            group_id, include_descendants, group_path
+        )
 
         sql = f"""
             SELECT
@@ -137,15 +142,14 @@ class PgVectorBackend:
             JOIN documents d ON c.doc_id = d.id
             WHERE c.embedding IS NOT NULL
               AND d.status = 'completed'
-              {tenant_clause}
+              {group_clause}
             ORDER BY c.embedding <=> CAST(:embedding AS vector)
             LIMIT :k
         """
 
         async with AsyncSessionLocal() as session:
             params: dict[str, Any] = {"embedding": embedding_literal, "k": k}
-            if tenant_id:
-                params["tenant_id"] = tenant_id
+            params.update(group_params)
             result = await session.execute(text(sql), params)
             return self._rows_to_hits(result.mappings().all())
 
@@ -153,14 +157,18 @@ class PgVectorBackend:
         self,
         query_text: str,
         k: int = 50,
-        tenant_id: str | None = None,
+        group_id: UUID | None = None,
+        include_descendants: bool = False,
+        group_path: str | None = None,
     ) -> list[dict[str, Any]]:
         morph = get_morph_analyzer()
         morph_query = morph.analyze(query_text)
         if not morph_query.strip():
             morph_query = query_text
 
-        tenant_clause = "AND c.tenant_id = :tenant_id" if tenant_id else ""
+        group_clause, group_params = group_filter_clause(
+            group_id, include_descendants, group_path
+        )
 
         sql = f"""
             SELECT
@@ -175,15 +183,14 @@ class PgVectorBackend:
             WHERE c.tsv IS NOT NULL
               AND c.tsv @@ plainto_tsquery('simple', :morph_query)
               AND d.status = 'completed'
-              {tenant_clause}
+              {group_clause}
             ORDER BY score DESC
             LIMIT :k
         """
 
         async with AsyncSessionLocal() as session:
             params: dict[str, Any] = {"morph_query": morph_query, "k": k}
-            if tenant_id:
-                params["tenant_id"] = tenant_id
+            params.update(group_params)
             result = await session.execute(text(sql), params)
             return self._rows_to_hits(result.mappings().all())
 

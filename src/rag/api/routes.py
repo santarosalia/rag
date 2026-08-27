@@ -3,11 +3,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from rag.api.groups import router as groups_router
 from rag.db.models import Document
 from rag.db.models import DocumentStatus as DBDocumentStatus
 from rag.db.session import get_db
 from rag.generation.service import QueryService
+from rag.groups.service import require_group, resolve_search_group
 from rag.ingestion.pipeline import create_document_record
 from rag.models.schemas import (
     DocumentResponse,
@@ -34,21 +37,27 @@ def _enqueue_delete(doc_id: str):
 
     return delete_document_task.delay(doc_id)
 
+
 router = APIRouter(prefix="/v1")
+router.include_router(groups_router)
 
 
 @router.post("/documents", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    tenant_id: str | None = Form(default=None),
+    group_id: UUID | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
+    if group_id is None:
+        raise HTTPException(status_code=400, detail="group_id is required")
 
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
+
+    await require_group(db, group_id)
 
     content_hash = compute_content_hash(data)
     storage = ObjectStorage()
@@ -59,7 +68,7 @@ async def upload_document(
         content_type=file.content_type or "application/octet-stream",
         content_hash=content_hash,
         s3_key="pending",
-        tenant_id=tenant_id,
+        group_id=group_id,
     )
 
     stored = storage.upload(data, file.filename, doc_id=document.id)
@@ -82,7 +91,9 @@ async def get_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> DocumentResponse:
-    result = await db.execute(select(Document).where(Document.id == doc_id))
+    result = await db.execute(
+        select(Document).options(selectinload(Document.group)).where(Document.id == doc_id)
+    )
     document = result.scalar_one_or_none()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -93,6 +104,8 @@ async def get_document(
         content_type=document.content_type,
         status=DocumentStatus(document.status.value),
         chunk_count=document.chunk_count,
+        group_id=document.group_id,
+        group_path=document.group.path,
         error_message=document.error_message,
         created_at=document.created_at,
         updated_at=document.updated_at,
@@ -117,13 +130,21 @@ async def delete_document(
 
 
 @router.post("/retrieve", response_model=RetrieveResponse)
-async def retrieve(request: RetrieveRequest) -> RetrieveResponse:
+async def retrieve(
+    request: RetrieveRequest,
+    db: AsyncSession = Depends(get_db),
+) -> RetrieveResponse:
     try:
+        group_id, include_descendants, group_path = await resolve_search_group(
+            db, request.group_id, request.include_descendants
+        )
         pipeline = RetrievalPipeline()
         citations, latency = await pipeline.retrieve(
             query=request.query,
             mode=request.mode,
-            tenant_id=request.tenant_id,
+            group_id=group_id,
+            include_descendants=include_descendants,
+            group_path=group_path,
             top_k=request.top_k,
             rerank=request.rerank,
         )
@@ -135,22 +156,34 @@ async def retrieve(request: RetrieveRequest) -> RetrieveResponse:
             citations=citations,
             latency_ms=latency,
         )
+    except HTTPException:
+        raise
     except Exception:
         QUERY_COUNTER.labels(endpoint="retrieve", status="error").inc()
         raise
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query(request: QueryRequest) -> QueryResponse:
+async def query(
+    request: QueryRequest,
+    db: AsyncSession = Depends(get_db),
+) -> QueryResponse:
     try:
+        group_id, include_descendants, group_path = await resolve_search_group(
+            db, request.group_id, request.include_descendants
+        )
         service = QueryService()
         response = await service.query(
             query=request.query,
-            tenant_id=request.tenant_id,
+            group_id=group_id,
+            include_descendants=include_descendants,
+            group_path=group_path,
             top_k=request.top_k,
         )
         QUERY_COUNTER.labels(endpoint="query", status="success").inc()
         return response
+    except HTTPException:
+        raise
     except Exception:
         QUERY_COUNTER.labels(endpoint="query", status="error").inc()
         raise
