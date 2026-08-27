@@ -54,7 +54,7 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Client / Application                      │
 └───────────────────────────────┬─────────────────────────────────┘
-                                │ REST API (X-API-Key)
+                                │ REST API
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastAPI (rag-api)                            │
@@ -307,7 +307,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 
 | 항목 | Phase 1 | Phase 2 |
 |------|---------|---------|
-| 인증 | X-API-Key | JWT + API Key |
+| 인증 | 없음 (내부망) | JWT |
 | Rate Limit | Redis sliding window (60 req/min) | per-tenant limit |
 | Group isolation | `group_id` / `group_path` filter | row-level / schema isolation |
 

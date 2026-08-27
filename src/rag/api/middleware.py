@@ -12,21 +12,6 @@ from rag.observability.logging import get_logger
 logger = get_logger(__name__)
 
 
-class APIKeyMiddleware(BaseHTTPMiddleware):
-    EXEMPT_PATHS = {"/health", "/ready", "/metrics", "/docs", "/openapi.json", "/redoc"}
-
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        if request.url.path in self.EXEMPT_PATHS:
-            return await call_next(request)
-
-        settings = get_settings()
-        api_key = request.headers.get("X-API-Key")
-        if not api_key or api_key != settings.api_key:
-            return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
-
-        return await call_next(request)
-
-
 class RateLimitMiddleware(BaseHTTPMiddleware):
     EXEMPT_PATHS = {"/health", "/ready", "/metrics", "/docs", "/openapi.json", "/redoc"}
 

@@ -34,7 +34,6 @@ async def test_upload_requires_group_id(app):
         response = await client.post(
             "/v1/documents",
             files={"file": ("a.txt", b"hello", "text/plain")},
-            headers={"X-API-Key": "dev-api-key-change-me"},
         )
         assert response.status_code == 400
         assert "group_id" in response.json()["detail"]
@@ -53,7 +52,6 @@ async def test_parsed_rejects_blank_markdown(app):
                 "filename": "a.pdf",
                 "markdown": "   ",
             },
-            headers={"X-API-Key": "dev-api-key-change-me"},
         )
         assert response.status_code == 400
         assert "markdown" in response.json()["detail"]
@@ -68,21 +66,12 @@ async def test_parsed_requires_filename(app):
         response = await client.post(
             "/v1/documents/parsed",
             json={"group_id": str(uuid4()), "markdown": "# hi"},
-            headers={"X-API-Key": "dev-api-key-change-me"},
         )
         assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_api_key_required(app):
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/v1/retrieve", json={"query": "test"})
-        assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_retrieve_with_api_key(app, monkeypatch):
+async def test_retrieve_without_auth(app, monkeypatch):
     from rag.models.schemas import Citation, SearchMode
 
     async def mock_retrieve(self, **kwargs):
@@ -116,7 +105,6 @@ async def test_retrieve_with_api_key(app, monkeypatch):
         response = await client.post(
             "/v1/retrieve",
             json={"query": "test query", "mode": "hybrid"},
-            headers={"X-API-Key": "dev-api-key-change-me"},
         )
         assert response.status_code == 200
         data = response.json()

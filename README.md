@@ -53,31 +53,26 @@ docker compose exec api alembic upgrade head
 ```bash
 # 그룹 생성
 curl -X POST http://localhost:8000/v1/groups \
-  -H "X-API-Key: dev-api-key-change-me" \
   -H "Content-Type: application/json" \
   -d '{"name": "default"}'
 
 # 업로드 (group_id 필수) — 경로 A
 curl -X POST http://localhost:8000/v1/documents \
-  -H "X-API-Key: dev-api-key-change-me" \
   -F "file=@document.pdf" \
   -F "group_id=<GROUP_UUID>"
 
 # 파싱된 Markdown — 경로 B
 curl -X POST http://localhost:8000/v1/documents/parsed \
-  -H "X-API-Key: dev-api-key-change-me" \
   -H "Content-Type: application/json" \
   -d '{"group_id": "<GROUP_UUID>", "filename": "document.pdf", "markdown": "# 제목\n\n본문"}'
 
 # 검색 (group_id 생략 시 전체, 하위 포함은 include_descendants)
 curl -X POST http://localhost:8000/v1/retrieve \
-  -H "X-API-Key: dev-api-key-change-me" \
   -H "Content-Type: application/json" \
   -d '{"query": "질의", "mode": "hybrid", "group_id": "<GROUP_UUID>"}'
 
 # RAG
 curl -X POST http://localhost:8000/v1/query \
-  -H "X-API-Key: dev-api-key-change-me" \
   -H "Content-Type: application/json" \
   -d '{"query": "질의"}'
 ```

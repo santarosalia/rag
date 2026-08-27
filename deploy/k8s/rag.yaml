@@ -29,7 +29,6 @@ metadata:
   namespace: rag
 type: Opaque
 stringData:
-  API_KEY: change-me-in-production
   DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/rag
   REDIS_URL: redis://redis:6379/0
   CELERY_BROKER_URL: redis://redis:6379/1

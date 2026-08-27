@@ -12,13 +12,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark RAG retrieval")
     parser.add_argument("query", help="Query text")
     parser.add_argument("--api-url", default="http://localhost:8000")
-    parser.add_argument("--api-key", default="dev-api-key-change-me")
     parser.add_argument("--mode", default="hybrid", choices=["hybrid", "dense", "sparse"])
     parser.add_argument("--iterations", type=int, default=10)
     args = parser.parse_args()
 
-    headers = {"X-API-Key": args.api_key}
-    client = httpx.Client(base_url=args.api_url, headers=headers, timeout=120.0)
+    client = httpx.Client(base_url=args.api_url, timeout=120.0)
 
     latencies: list[float] = []
     for i in range(args.iterations):
