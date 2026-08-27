@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import tiktoken
 
-_HEADING = re.compile(r"(?m)^(?=#{1,3} )")
+_HEADING = re.compile(r"(?m)^#{1,6}\s+")
 _TABLE_LINE = re.compile(r"^\s*\|.*\|\s*$")
 
 
@@ -53,9 +53,21 @@ class SemanticChunker:
                 current_parts = []
                 current_tokens = 0
                 return
-            if self.count_tokens(content) >= self.min_chunk_tokens or not chunks:
+            tokens = self.count_tokens(content)
+            if (
+                tokens >= self.min_chunk_tokens
+                or not chunks
+                or _HEADING.match(content)
+            ):
                 chunks.append(self._make_chunk(content, chunk_index, page))
                 chunk_index += 1
+            else:
+                prev = chunks[-1]
+                chunks[-1] = self._make_chunk(
+                    f"{prev.content}\n\n{content}",
+                    prev.chunk_index,
+                    page,
+                )
             current_parts = []
             current_tokens = 0
 
@@ -92,9 +104,7 @@ class SemanticChunker:
                 current_tokens = self.count_tokens("\n\n".join(current_parts))
 
         if current_parts:
-            content = "\n\n".join(current_parts).strip()
-            if content and (self.count_tokens(content) >= self.min_chunk_tokens or not chunks):
-                chunks.append(self._make_chunk(content, chunk_index, page))
+            flush()
 
         return chunks
 

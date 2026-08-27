@@ -110,7 +110,7 @@ multipart:
 
 ```
 Markdown
-  → Semantic Chunker (헤딩 `#`/`##` 경계 우선)
+  → Semantic Chunker (ATX 헤딩 `#`–`######` 경계 우선)
   → BGE-M3 embed + Kiwi morph
   → chunks INSERT (content, group_id, …)
   → commit
@@ -177,7 +177,7 @@ MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용
 
 ### 5.1 Chunking (Markdown)
 
-헤딩(`#`/`##`/`###`)·표 경계 우선. 규칙 전부: [`CHUNKING.md`](CHUNKING.md).
+헤딩(ATX `#`–`######`)·표 경계 우선. 규칙 전부: [`CHUNKING.md`](CHUNKING.md).
 
 ### 5.2 운영
 
