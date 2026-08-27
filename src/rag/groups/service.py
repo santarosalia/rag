@@ -101,6 +101,9 @@ async def create_group(session: AsyncSession, name: str, parent_id: UUID | None)
     await session.flush()
     group.path = child_path(parent.path, group.id) if parent else root_path(group.id)
     await session.flush()
+    # onupdate=func.now() expires updated_at after the path UPDATE; accessing it
+    # without an explicit refresh triggers a sync lazy load (MissingGreenlet).
+    await session.refresh(group)
     return group
 
 
