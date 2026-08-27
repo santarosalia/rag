@@ -30,7 +30,7 @@
 | 경로 | API | 이 저장소가 하는 일 |
 |------|------------|---------------------|
 | **A. 원본** | `POST /v1/documents` | 파일 수신 → S3 → **MarkItDown** → 아래와 동일 |
-| **B. 파싱본** | `POST /v1/documents/parsed` | **Markdown + 메타** 수신 → (선택) S3에 `.md` 보관 → 아래와 동일 |
+| **B. 파싱본** | `POST /v1/documents/parsed` (JSON) 또는 `/parsed/file` (multipart) | **Markdown** 수신 → S3에 `.md` 보관 → 아래와 동일 |
 | **공통 이후** | Celery `ingest_document` | chunk → embed → Kiwi morph → PG 적재 |
 | **검색** | `POST /v1/retrieve`, `/v1/query` | 변경 없음 |
 
@@ -89,6 +89,20 @@ JSON:
 | `content_type` | no | 원본 MIME. 없으면 `text/markdown` |
 
 원본 파일은 이 API로 받지 않는다. 재파싱이 필요하면 경로 A로 다시 올린다.
+
+### 3.3 `POST /v1/documents/parsed/file` — 파싱된 Markdown 파일 (경로 B)
+
+JSON 대신 `.md` 바이너리를 보낼 때 쓴다. MarkItDown은 타지 않는다. `POST /v1/documents`에 `.md`를 올리면 경로 A다.
+
+multipart:
+
+| 필드 | 필수 | 설명 |
+|------|------|------|
+| `file` | yes | UTF-8 Markdown 바이트 |
+| `group_id` | yes | 소속 그룹 |
+| `filename` | no | citation용 이름. 없으면 업로드 파일명 |
+
+이후 적재는 JSON 경로 B와 같다.
 
 ---
 
@@ -213,7 +227,7 @@ MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용
 ## 8. 체크리스트 (구현 시)
 
 - [x] 경로 A: `parsers.py` → MarkItDown, 이후 기존 chunk/embed와 연결
-- [x] 경로 B: `POST /v1/documents/parsed` (`group_id`, `filename`, `markdown`)
+- [x] 경로 B: `POST /v1/documents/parsed` JSON, `POST /v1/documents/parsed/file` 파일
 - [x] 두 경로 모두 동일 Celery 적재, `group_id` 기록
 - [x] `documents.status = completed` 후에만 검색
 - [x] chunk INSERT → commit → embedding/`tsv` UPDATE 순서 유지

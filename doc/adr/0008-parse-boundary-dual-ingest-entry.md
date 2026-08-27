@@ -25,7 +25,7 @@
 | 경로 | 입력 | 파싱 |
 |------|------|------|
 | A | 원본 파일 `POST /v1/documents` | 이 저장소 **MarkItDown** |
-| B | 이미 파싱된 Markdown `POST /v1/documents/parsed` | 호출측 (외부 파서) |
+| B | 이미 파싱된 Markdown `POST /v1/documents/parsed` (JSON) 또는 `/parsed/file` (파일) | 호출측 (외부 파서) |
 
 이후 파이프라인은 공유한다. 외부 파서는 PG에 쓰지 않고, chunk/embedding도 보내지 않는다.
 

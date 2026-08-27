@@ -42,6 +42,44 @@ router = APIRouter(prefix="/v1")
 router.include_router(groups_router)
 
 
+async def _enqueue_parsed_markdown(
+    db: AsyncSession,
+    *,
+    group_id: str,
+    filename: str,
+    content_type: str,
+    data: bytes,
+) -> DocumentUploadResponse:
+    await require_group(db, group_id)
+    storage = ObjectStorage()
+    document, job = await create_document_record(
+        db,
+        filename=filename,
+        content_type=content_type,
+        s3_key="pending",
+        group_id=group_id,
+        parse_kind="markdown",
+    )
+    stored = storage.upload(data, "content.md", doc_id=document.id)
+    document.s3_key = stored.key
+    await db.flush()
+    task = _enqueue_ingest(str(document.id), str(job.id))
+    job.celery_task_id = task.id
+    await db.flush()
+    return DocumentUploadResponse(
+        doc_id=document.id,
+        job_id=job.id,
+        status=DocumentStatus.PENDING,
+    )
+
+
+def _utf8_markdown(data: bytes) -> bytes:
+    text = data.decode("utf-8-sig", errors="replace").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="markdown is required")
+    return text.encode("utf-8")
+
+
 @router.post("/documents", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
@@ -96,32 +134,38 @@ async def upload_parsed_document(
     if not filename:
         raise HTTPException(status_code=400, detail="filename is required")
 
-    await require_group(db, body.group_id)
-
-    data = markdown.encode("utf-8")
-    storage = ObjectStorage()
-
-    document, job = await create_document_record(
+    return await _enqueue_parsed_markdown(
         db,
+        group_id=body.group_id,
         filename=filename,
         content_type=body.content_type or "text/markdown",
-        s3_key="pending",
-        group_id=body.group_id,
-        parse_kind="markdown",
+        data=markdown.encode("utf-8"),
     )
 
-    stored = storage.upload(data, "content.md", doc_id=document.id)
-    document.s3_key = stored.key
-    await db.flush()
 
-    task = _enqueue_ingest(str(document.id), str(job.id))
-    job.celery_task_id = task.id
-    await db.flush()
+@router.post("/documents/parsed/file", response_model=DocumentUploadResponse)
+async def upload_parsed_markdown_file(
+    file: UploadFile = File(...),
+    group_id: str | None = Form(default=None),
+    filename: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUploadResponse:
+    if not group_id or not group_id.strip():
+        raise HTTPException(status_code=400, detail="group_id is required")
+    citation_name = (filename or file.filename or "").strip()
+    if not citation_name:
+        raise HTTPException(status_code=400, detail="Filename is required")
 
-    return DocumentUploadResponse(
-        doc_id=document.id,
-        job_id=job.id,
-        status=DocumentStatus.PENDING,
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+    data = _utf8_markdown(raw)
+    return await _enqueue_parsed_markdown(
+        db,
+        group_id=group_id.strip(),
+        filename=citation_name,
+        content_type=file.content_type or "text/markdown",
+        data=data,
     )
 
 

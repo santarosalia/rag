@@ -61,10 +61,15 @@ curl -X POST http://localhost:8000/v1/documents \
   -F "file=@document.pdf" \
   -F "group_id=ga"
 
-# 파싱된 Markdown — 경로 B
+# 파싱된 Markdown JSON — 경로 B
 curl -X POST http://localhost:8000/v1/documents/parsed \
   -H "Content-Type: application/json" \
   -d '{"group_id": "ga", "filename": "document.pdf", "markdown": "# 제목\n\n본문"}'
+
+# 파싱된 Markdown 파일 — 경로 B
+curl -X POST http://localhost:8000/v1/documents/parsed/file \
+  -F "file=@document.md" \
+  -F "group_id=ga"
 
 # 검색 (group_id 생략 시 전체)
 curl -X POST http://localhost:8000/v1/retrieve \
@@ -89,7 +94,8 @@ curl -X POST http://localhost:8000/v1/query \
 | `DELETE /v1/groups/{id}` | 빈 그룹만 삭제 |
 | `GET /v1/groups/{id}/documents` | 소속 문서 |
 | `POST /v1/documents` | 원본 업로드 (`group_id` 필수) → MarkItDown → 적재 |
-| `POST /v1/documents/parsed` | 파싱된 Markdown 수신 후 동일 적재 |
+| `POST /v1/documents/parsed` | 파싱된 Markdown JSON 수신 후 동일 적재 |
+| `POST /v1/documents/parsed/file` | 파싱된 Markdown 파일 수신 후 동일 적재 |
 | `GET /v1/documents/{id}` | 인덱싱 상태 (`group_id`) |
 | `POST /v1/retrieve` | hybrid/dense/sparse 검색 |
 | `POST /v1/query` | 검색 + LLM 답변 |

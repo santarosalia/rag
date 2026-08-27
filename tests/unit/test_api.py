@@ -71,6 +71,31 @@ async def test_parsed_requires_filename(app):
 
 
 @pytest.mark.asyncio
+async def test_parsed_file_requires_group_id(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/documents/parsed/file",
+            files={"file": ("note.md", b"# hello", "text/markdown")},
+        )
+        assert response.status_code == 400
+        assert "group_id" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_parsed_file_rejects_empty(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/documents/parsed/file",
+            data={"group_id": "ga"},
+            files={"file": ("note.md", b"   ", "text/markdown")},
+        )
+        assert response.status_code == 400
+        assert "markdown" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_retrieve_without_auth(app, monkeypatch):
     from rag.models.schemas import Citation, SearchMode
 
