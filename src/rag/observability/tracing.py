@@ -14,7 +14,7 @@ def setup_tracing(service_name: str = "rag-api") -> None:
         return
 
     provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
-    provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+    # provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
     trace.set_tracer_provider(provider)
     _initialized = True
 
