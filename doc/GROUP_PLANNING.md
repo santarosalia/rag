@@ -6,7 +6,7 @@
 > **작성일:** 2026-08-27  
 > **상태:** 구현 대상 (ADR-0009)
 
-관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ADR-0009`](adr/0009-flat-groups-caller-defined-id.md)
+관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`CHUNKING.md`](CHUNKING.md) · [`ADR-0009`](adr/0009-flat-groups-caller-defined-id.md)
 
 트리 시절 기획은 [`GROUP_TREE_PLANNING.md`](GROUP_TREE_PLANNING.md) (superseded).
 

@@ -33,3 +33,4 @@
 - [아키텍처 상세](../ARCHITECTURE.md)
 - [그룹 기획](../GROUP_PLANNING.md)
 - [파싱 경계](../PARSE_BOUNDARY.md)
+- [청킹 규칙](../CHUNKING.md)

@@ -126,18 +126,8 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 
 ### 3.3 Chunking 전략
 
-**Semantic Chunker** — Markdown 헤딩(`#`/`##`/`###`) 경계 우선, 표는 가능하면 한 청크
-
-| 파라미터 | 기본값 | 설명 |
-|----------|--------|------|
-| `max_tokens` | 768 | 청크 최대 토큰 |
-| `overlap_tokens` | 128 | 청크 간 겹침 (recall 안정화) |
-| `min_chunk_tokens` | 64 | 최소 청크 크기 |
-
-**설계 원칙:**
-- 고정 길이 분할보다 **헤딩·표 경계** 우선
-- overlap으로 경계에 걸린 정보의 recall 손실 방지
-- oversized 블록은 문장 → 단어 단위로 재분할
+Markdown 헤딩·표 경계를 우선하는 Semantic Chunker (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
+상세: [`CHUNKING.md`](CHUNKING.md).
 
 ### 3.4 메타데이터 스키마
 
@@ -447,3 +437,4 @@ CI에서 Recall@5, MRR threshold gate.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
 - [adr/](adr/) — Architecture Decision Records
 - [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md) — 파싱 경계, 이중 진입점, 적재 계약
+- [CHUNKING.md](CHUNKING.md) — Semantic Chunker 분할 규칙

@@ -177,9 +177,7 @@ MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용
 
 ### 5.1 Chunking (Markdown)
 
-- `#` / `##` / `###` 헤딩 경계 우선
-- 표는 가능하면 한 chunk에 유지
-- 코드블록·목록은 `overlap_tokens`로 경계 recall 보완
+헤딩(`#`/`##`/`###`)·표 경계 우선. 규칙 전부: [`CHUNKING.md`](CHUNKING.md).
 
 ### 5.2 운영
 
@@ -268,4 +266,5 @@ A. ADR-0002로 제거. 없음.
 - [ADR-0008](./adr/0008-parse-boundary-dual-ingest-entry.md) — 이 결정
 - [RAG_PLANNING.md](./RAG_PLANNING.md)
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [CHUNKING.md](./CHUNKING.md) — Markdown 청킹 규칙
 - [adr/0002](./adr/0002-remove-opensearch-single-db-stack.md) · [adr/0005](./adr/0005-celery-redis-async-ingestion.md)
