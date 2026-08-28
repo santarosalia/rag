@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KOBACO RAGAS 평가 리포트</title>
+  <style>
+    :root {
+      --bg: #f6f5f1;
+      --fg: #1c1b16;
+      --muted: #5c5a52;
+      --line: #d9d6cc;
+      --card: #fff;
+      --info: #2563eb;
+      --ok: #15803d;
+      --warn: #b45309;
+      --bad: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 24px; font-weight: 650; margin: 0 0 6px; }
+    h2 { font-size: 18px; font-weight: 650; margin: 36px 0 10px; }
+    h3 { font-size: 15px; font-weight: 650; margin: 0 0 6px; }
+    p { margin: 0 0 10px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .pills { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 18px; }
+    .pill {
+      font-size: 12px; padding: 2px 8px; border: 1px solid var(--line);
+      border-radius: 999px; background: var(--card);
+    }
+    .callout {
+      background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
+      padding: 14px 16px; margin: 16px 0 24px;
+    }
+    .callout strong { color: var(--warn); display: block; margin-bottom: 4px; }
+    .stats {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0 8px;
+    }
+    .stat {
+      background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .stat b { display: block; font-size: 22px; font-weight: 650; }
+    .stat span { font-size: 12px; color: var(--muted); }
+    .warn { color: var(--warn); }
+    .ok { color: var(--ok); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--card); }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: 12px; color: var(--muted); font-weight: 600; background: #eeece6; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.danger td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+    tr.warning td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+    tr.success td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+    .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+    .card .muted { margin-bottom: 8px; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    details { margin: 12px 0; }
+    summary { cursor: pointer; font-weight: 650; padding: 8px 0; }
+    svg.chart { width: 100%; height: auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+    .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin: 8px 0 12px; }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
+    @media (max-width: 800px) {
+      .stats, .cards, .cols { grid-template-columns: 1fr; }
+    }
+    @media print {
+      body { background: #fff; }
+      details { open: true; }
+      details[open] summary, details summary { display: none; }
+      details { display: block; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>KOBACO RAGAS 평가 리포트</h1>
+  <p class="muted">Source: results/kobaco_result.json · 2026-08-28 07:41–07:45 UTC · runner api · group_id=ko · top_k=5 · 61문항</p>
+  <div class="pills">
+    <span class="pill">faithfulness</span>
+    <span class="pill">context recall</span>
+    <span class="pill">context precision</span>
+  </div>
+
+  <div class="callout">
+    <strong>검색은 되고, 점수는 데이터와 생성기가 깎는다</strong>
+    61문항 중 context recall 1.0이 58건이다. 0점 3건은 검색 실패가 아니라
+    GT 오타(굳앤트 vs 군앤트)와 첨부 목록이 청크에 쪼개진 경우다.
+    Faithfulness가 더 약하다. 특히 단순 AI 툴 문항(S)은 질문이 짧은데
+    답이 문맥을 길게 나열해서 0.79까지 떨어진다.
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>61</b><span>평가 문항</span></div>
+    <div class="stat"><b class="warn">90.4%</b><span>Faithfulness 평균</span></div>
+    <div class="stat"><b class="ok">95.1%</b><span>Context recall 평균</span></div>
+    <div class="stat"><b>94.8%</b><span>Context precision 평균</span></div>
+  </div>
+
+  <h2>세트별 RAGAS 평균</h2>
+  <p class="muted">복합·패러프레이즈(20문항)가 단순 질의(41문항)보다 높다. 문항 평균.</p>
+  <table>
+    <thead>
+      <tr><th>세트</th><th class="num">문항</th><th class="num">Faithfulness</th><th class="num">Recall</th><th class="num">Precision</th></tr>
+    </thead>
+    <tbody>
+      <tr class="success"><td>kobaco-complex (멀티홉)</td><td class="num">20</td><td class="num">96.6%</td><td class="num">95.0%</td><td class="num">98.7%</td></tr>
+      <tr class="warning"><td>kobaco-simple (단일 사실)</td><td class="num">41</td><td class="num">87.4%</td><td class="num">95.1%</td><td class="num">92.8%</td></tr>
+      <tr><td>전체 가중 평균</td><td class="num">61</td><td class="num">90.4%</td><td class="num">95.1%</td><td class="num">94.8%</td></tr>
+    </tbody>
+  </table>
+
+  <h2>주제 그룹별 점수</h2>
+  <p class="muted">패러프레이즈 q16–q25 · 복합 C01–C10 · AiSAC q1–q16 · 통합유지운영 itops · AI 솔루션 S01–S10. 값 축 0–100%.</p>
+  <div class="legend">
+    <span><i style="background:#2563eb"></i>Faithfulness</span>
+    <span><i style="background:#15803d"></i>Context recall</span>
+    <span><i style="background:#b45309"></i>Context precision</span>
+  </div>
+  <svg class="chart" viewBox="0 0 900 280" role="img" aria-label="주제 그룹별 RAGAS 점수">
+    <line x1="56" y1="20" x2="56" y2="220" stroke="#d9d6cc" />
+    <line x1="56" y1="220" x2="880" y2="220" stroke="#d9d6cc" />
+    <text x="48" y="24" text-anchor="end" font-size="11" fill="#5c5a52">100</text>
+    <text x="48" y="124" text-anchor="end" font-size="11" fill="#5c5a52">50</text>
+    <text x="48" y="224" text-anchor="end" font-size="11" fill="#5c5a52">0</text>
+    <!-- groups: 5, each width 150 starting 80 -->
+    <!-- F,R,P bars width 18 gap 4; group labels -->
+    <g font-size="11" fill="#1c1b16">
+      <!-- 패러프레이즈 95.1 90.0 99.2 -->
+      <rect x="80" y="29.8" width="18" height="190.2" fill="#2563eb"/><text x="89" y="24" text-anchor="middle" fill="#2563eb">95</text>
+      <rect x="102" y="40" width="18" height="180" fill="#15803d"/><text x="111" y="34" text-anchor="middle" fill="#15803d">90</text>
+      <rect x="124" y="21.6" width="18" height="198.4" fill="#b45309"/><text x="133" y="16" text-anchor="middle" fill="#b45309">99</text>
+      <text x="111" y="242" text-anchor="middle" fill="#5c5a52">패러프레이즈</text>
+      <!-- 복합 C 98.1 100 98.3 -->
+      <rect x="240" y="23.8" width="18" height="196.2" fill="#2563eb"/><text x="249" y="18" text-anchor="middle" fill="#2563eb">98</text>
+      <rect x="262" y="20" width="18" height="200" fill="#15803d"/><text x="271" y="14" text-anchor="middle" fill="#15803d">100</text>
+      <rect x="284" y="23.4" width="18" height="196.6" fill="#b45309"/><text x="293" y="18" text-anchor="middle" fill="#b45309">98</text>
+      <text x="271" y="242" text-anchor="middle" fill="#5c5a52">복합 C</text>
+      <!-- AiSAC 85.9 93.8 91.1 -->
+      <rect x="400" y="48.2" width="18" height="171.8" fill="#2563eb"/><text x="409" y="42" text-anchor="middle" fill="#2563eb">86</text>
+      <rect x="422" y="32.4" width="18" height="187.6" fill="#15803d"/><text x="431" y="26" text-anchor="middle" fill="#15803d">94</text>
+      <rect x="444" y="37.8" width="18" height="182.2" fill="#b45309"/><text x="453" y="32" text-anchor="middle" fill="#b45309">91</text>
+      <text x="431" y="242" text-anchor="middle" fill="#5c5a52">AiSAC</text>
+      <!-- 통합유지운영 94.8 93.3 94.9 -->
+      <rect x="560" y="30.4" width="18" height="189.6" fill="#2563eb"/><text x="569" y="24" text-anchor="middle" fill="#2563eb">95</text>
+      <rect x="582" y="33.4" width="18" height="186.6" fill="#15803d"/><text x="591" y="28" text-anchor="middle" fill="#15803d">93</text>
+      <rect x="604" y="30.2" width="18" height="189.8" fill="#b45309"/><text x="613" y="24" text-anchor="middle" fill="#b45309">95</text>
+      <text x="591" y="242" text-anchor="middle" fill="#5c5a52">통합유지운영</text>
+      <!-- AI 솔루션 S 78.8 100 92.4 -->
+      <rect x="720" y="62.4" width="18" height="157.6" fill="#2563eb"/><text x="729" y="56" text-anchor="middle" fill="#2563eb">79</text>
+      <rect x="742" y="20" width="18" height="200" fill="#15803d"/><text x="751" y="14" text-anchor="middle" fill="#15803d">100</text>
+      <rect x="764" y="35.2" width="18" height="184.8" fill="#b45309"/><text x="773" y="30" text-anchor="middle" fill="#b45309">92</text>
+      <text x="751" y="242" text-anchor="middle" fill="#5c5a52">AI 솔루션 S</text>
+    </g>
+  </svg>
+
+  <div class="cards">
+    <div class="card">
+      <h3>Recall 0 · 3건</h3>
+      <p class="muted">q17 · itops-q2: GT는 「㈜굳앤트」, 문서·답은 「(주)군앤트」. 검색은 해당 청크를 올렸고 답도 맞다. Judge가 GT 문장을 문맥에 귀속시키지 못해 0점.</p>
+      <p class="muted" style="margin:0">q9: GT는 첨부 6건. 목록이 청크에 갈라져 모델이 한 청크의 3건만 세었다. Faithfulness는 1.0 — 문맥에는 충실하다.</p>
+    </div>
+    <div class="card">
+      <h3>Faithfulness 최저 · S세트</h3>
+      <p class="muted">S01–S10 평균 78.8%. 질문은 「목적은?」「서비스는?」처럼 짧은데 답이 이유·효과·예산까지 나열한다. Judge는 문맥에 없는 부가 주장을 감점한다.</p>
+      <p class="muted" style="margin:0">같은 문서를 쓰는 복합 C01–C10은 질문이 넓어 평균 98.1%다. 검색 차이가 아니라 생성 길이다.</p>
+    </div>
+    <div class="card">
+      <h3>Precision 하락 · AiSAC 메타</h3>
+      <p class="muted">q7 문서번호 · q10 첨부 목록: precision 0.50. 관련 청크는 올라오지만 GPU 이용료·로고 페이지가 top-5에 섞여 AP가 깎인다.</p>
+      <p class="muted" style="margin:0">q8 시행일은 답이 2026.2.9로 맞고 recall은 1.0인데 faithfulness가 0이다. Judge 노이즈로 보는 편이 맞다.</p>
+    </div>
+  </div>
+
+  <h2>실패한 문항의 실제 원인</h2>
+  <p class="muted">min(점수) &lt; 0.8 인 문항. 검색 실패로 단정하면 안 되는 케이스다.</p>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>문제</th><th class="num">F</th><th class="num">R</th><th class="num">P</th><th>원인</th></tr>
+    </thead>
+    <tbody>
+      <tr class="danger"><td>q17 / itops-q2</td><td>수행업체</td><td class="num">1.00</td><td class="num">0.00</td><td class="num">1.00</td><td>GT 굳앤트 ↔ 문서 군앤트</td></tr>
+      <tr class="danger"><td>q9</td><td>첨부 건수</td><td class="num">1.00</td><td class="num">0.00</td><td class="num">1.00</td><td>6건 목록이 청크에 분리</td></tr>
+      <tr class="danger"><td>q8</td><td>시행일</td><td class="num">0.00</td><td class="num">1.00</td><td class="num">0.75</td><td>답은 맞음, judge 0점</td></tr>
+      <tr class="warning"><td>itops-q4</td><td>사업비 내역</td><td class="num">0.33</td><td class="num">1.00</td><td class="num">1.00</td><td>합계 문장을 추가로 생성</td></tr>
+      <tr class="warning"><td>q7</td><td>문서번호</td><td class="num">0.50</td><td class="num">1.00</td><td class="num">0.50</td><td>메타 청크 + 비관련 문서</td></tr>
+      <tr class="warning"><td>q3</td><td>계약기간</td><td class="num">0.67</td><td class="num">1.00</td><td class="num">1.00</td><td>2/9 계약 vs 2/1 사업기간 병기</td></tr>
+      <tr class="warning"><td>q15</td><td>담당자</td><td class="num">0.57</td><td class="num">1.00</td><td class="num">1.00</td><td>장현진 + 김형노를 함께 언급</td></tr>
+      <tr class="warning"><td>S02·S03·S06·S08</td><td>AI 툴 단순 질의</td><td class="num">0.50–0.60</td><td class="num">1.00</td><td class="num">0.75+</td><td>짧은 질문에 장황한 답</td></tr>
+    </tbody>
+  </table>
+
+  <hr />
+  <h2>무엇을 고치면 점수가 오르는가</h2>
+  <div class="cols">
+    <div>
+      <h3>데이터셋</h3>
+      <p class="muted">GT 「굳앤트」를 문서 표기 「군앤트」로 맞춘다. q9 GT를 청크 단위에 맞게 쓰거나, 첨부 목록이 한 청크에 들어가게 자른다. 「중 하나」형 S문항은 GT를 넓히거나 질문을 복합 C처럼 묶는다.</p>
+    </div>
+    <div>
+      <h3>시스템</h3>
+      <p class="muted">좁은 사실 질의에서 답을 한 문장으로 제한하면 faithfulness가 바로 오른다. 문서번호·시행일 질의는 로고·푸터 청크를 rerank 전에 빼는 편이 precision에 유리하다. top_k=5는 유지하는 것이 맞다 — 내부 50은 이미 돈다.</p>
+    </div>
+  </div>
+
+  <h2>검색 지연</h2>
+  <p class="muted">61문항 평균 retrieve. 거의 전부 cross-encoder rerank. Source: traces[].latency_ms</p>
+  <div class="stats">
+    <div class="stat"><b>373 ms</b><span>total 평균</span></div>
+    <div class="stat"><b>368 ms</b><span>rerank</span></div>
+    <div class="stat"><b>2.3 ms</b><span>dense kNN</span></div>
+    <div class="stat"><b>1.6 ms</b><span>sparse FTS</span></div>
+  </div>
+
+  <details open>
+    <summary>kobaco-complex 문항 점수 (20)</summary>
+    <table>
+      <thead><tr><th>ID</th><th>질의 요약</th><th class="num">F</th><th class="num">R</th><th class="num">P</th></tr></thead>
+      <tbody>
+        <tr class="success"><td>q16</td><td>통합유지운영 사업은 몇 년 차 계약인가</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="danger"><td>q17</td><td>이 사업을 수행하는 업체는 어디인가</td><td class="num">1.00</td><td class="num">0.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q18</td><td>통합유지운영 예산 규모</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q19</td><td>서버·네트워크 장애 예방 업무 범위</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>q20</td><td>KOBAnet·KODEX 담당 조직</td><td class="num">0.67</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q21</td><td>홈페이지 유지운영에서 추진하는 개선</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>q22</td><td>보안 분야 전문 지원 업무</td><td class="num">0.85</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>q23</td><td>업그레이드 대상 업무시스템</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.92</td></tr>
+        <tr class="success"><td>q24</td><td>성과관리를 위해 설정하는 지표</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q25</td><td>요구사항 관리에 쓰는 시스템</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>C01</td><td>AI 툴 이용 이유와 기대 효과</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>C02</td><td>이용기간과 구독 방식</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>C03</td><td>ChatGPT와 Notion 각각의 목적</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>C04</td><td>예산 금액과 예산항목</td><td class="num">0.88</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>C05</td><td>공유가 어려운 정보는 무엇인가</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>C06</td><td>추가 도입 가능 여부와 조건</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>C07</td><td>대표 계정 구독 이유와 효과</td><td class="num">0.93</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>C08</td><td>해외 솔루션 비용 처리와 예산</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.83</td></tr>
+        <tr class="success"><td>C09</td><td>기술 도입 타당성 검토 활용</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>C10</td><td>품질 개선·인수인계 각각의 효과</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+      </tbody>
+    </table>
+  </details>
+
+  <details>
+    <summary>kobaco-simple 문항 점수 (41)</summary>
+    <table>
+      <thead><tr><th>ID</th><th>질의 요약</th><th class="num">F</th><th class="num">R</th><th class="num">P</th></tr></thead>
+      <tbody>
+        <tr class="success"><td>q1</td><td>AiSAC 계약업체</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q2</td><td>AiSAC 계약금액</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>q3</td><td>AiSAC 계약기간</td><td class="num">0.67</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q4</td><td>정확한 용역명</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q5</td><td>업체·금액·기간을 함께</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q6</td><td>관련 사업자 선정 계획</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>q7</td><td>시행 문서번호</td><td class="num">0.50</td><td class="num">1.00</td><td class="num">0.50</td></tr>
+        <tr class="danger"><td>q8</td><td>시행일</td><td class="num">0.00</td><td class="num">1.00</td><td class="num">0.75</td></tr>
+        <tr class="danger"><td>q9</td><td>첨부 문서 건수</td><td class="num">1.00</td><td class="num">0.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>q10</td><td>첨부 문서 목록</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.50</td></tr>
+        <tr class="success"><td>q11</td><td>사업자 선정 관련 첨부</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q12</td><td>부가세 포함 여부</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q13</td><td>진행 개월 수</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>q14</td><td>발주기관</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.83</td></tr>
+        <tr class="warning"><td>q15</td><td>담당자</td><td class="num">0.57</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>q16</td><td>비공개 등급</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>itops-q1</td><td>통합유지운영 사업기간</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="danger"><td>itops-q2</td><td>수행업체</td><td class="num">1.00</td><td class="num">0.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>itops-q3</td><td>총 소요예산</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>itops-q4</td><td>사업비·실무협의비 각각</td><td class="num">0.33</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>itops-q5</td><td>추진 목적</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>itops-q6</td><td>KOBAnet·KODEX 담당 팀</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>itops-q7</td><td>경영지원시스템 담당 팀</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>itops-q8</td><td>홈페이지 유지운영 내용</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>itops-q9</td><td>IT인프라 관리 범위</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.83</td></tr>
+        <tr class="success"><td>itops-q10</td><td>정보보호 전문가 지원</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>itops-q11</td><td>세부 추진내용</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.70</td></tr>
+        <tr class="warning"><td>itops-q12</td><td>성능 개선 추진 업무</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.70</td></tr>
+        <tr class="success"><td>itops-q13</td><td>SLA 관련 관리 활동</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>itops-q14</td><td>ITSM 운영 목적</td><td class="num">0.89</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>itops-q15</td><td>운영·예방점검 기준</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>S01</td><td>이용하려는 AI 툴</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>S02</td><td>이용의 주요 목적</td><td class="num">0.58</td><td class="num">1.00</td><td class="num">0.75</td></tr>
+        <tr class="warning"><td>S03</td><td>언급된 서비스</td><td class="num">0.50</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="success"><td>S04</td><td>구독 계정</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr><td>S05</td><td>이용기간</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.87</td></tr>
+        <tr class="warning"><td>S06</td><td>연간 구독 이용기간 적용</td><td class="num">0.50</td><td class="num">1.00</td><td class="num">0.76</td></tr>
+        <tr class="success"><td>S07</td><td>소요예산</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>S08</td><td>예산항목</td><td class="num">0.60</td><td class="num">1.00</td><td class="num">0.87</td></tr>
+        <tr class="success"><td>S09</td><td>해외 솔루션 결제수단</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+        <tr class="warning"><td>S10</td><td>기대 효과 중 하나</td><td class="num">0.70</td><td class="num">1.00</td><td class="num">1.00</td></tr>
+      </tbody>
+    </table>
+  </details>
+</main>
+</body>
+</html>
