@@ -3,7 +3,6 @@
 # Usage:
 #   rag-eval tests/eval/ragas_template.yaml
 #   rag-eval tests/eval/ragas_template.yaml --dry-run
-#   rag-eval tests/eval/ragas_template.yaml --dry-run
 #   rag-eval tests/eval/ragas_template.yaml --runner direct
 #
 # Prerequisites:
