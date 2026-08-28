@@ -167,7 +167,6 @@ def test_ragas_input_dir_has_yaml():
 @pytest.mark.parametrize("path", _ragas_input_yaml(), ids=lambda p: p.name)
 def test_ragas_input_loads(path: Path):
     data = load_dataset(path)
-    defaults = resolve_defaults(data)
     assert "use" in data
     assert data["use"] in (True, False)
     assert len(data["items"]) >= 1
