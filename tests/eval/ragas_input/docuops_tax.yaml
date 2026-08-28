@@ -1,10 +1,8 @@
 # DocuOps 벤치마크 — 세무과 업무 매뉴얼 (RAGAS input)
 #
 # Usage:
-#   rag-eval tests/eval/ragas_input/docuops_tax.yaml
-#   rag-eval tests/eval/ragas_input/docuops_tax.yaml --dry-run
-#   rag-eval tests/eval/ragas_input --dry-run
-#   rag-eval tests/eval/ragas_input/docuops_tax.yaml --runner direct
+#   uv run --no-project --with ragas --with openai --with httpx --with pyyaml \
+#     python scripts/eval_ragas.py tests/eval/ragas_input --dry-run
 #
 # 문항당 최적화 질의 + 실사용 질의 (동일 ground_truth). group_id=dc 코퍼스 선행 적재.
 
@@ -30,7 +28,7 @@ defaults:
     answer_relevancy: 0.70
 
   judge:
-    model: gpt-4o-mini
+    model: Qwen/Qwen3.5-35B-A3B-FP8
     base_url: null
     api_key_env: LLM_API_KEY
     temperature: 0.0

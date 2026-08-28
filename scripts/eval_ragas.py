@@ -54,6 +54,28 @@ def list_dataset_paths(path: Path) -> list[Path]:
     return [path]
 
 
+def load_dotenv_file(path: Path = Path(".env")) -> None:
+    """Fill os.environ from .env without overwriting existing variables."""
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
+
+
+def llm_env() -> tuple[str, str]:
+    load_dotenv_file()
+    base_url = os.environ.get("LLM_BASE_URL") or "https://api.openai.com/v1"
+    api_key = os.environ.get("LLM_API_KEY") or ""
+    return base_url, api_key
+
+
 RESULTS_DIR = Path("results")
 
 
@@ -274,16 +296,16 @@ def run_ragas(
     from ragas.embeddings.base import embedding_factory
     from ragas.llms import llm_factory
 
-    from rag.config import get_settings
-
-    settings = get_settings()
+    base_url, api_key = llm_env()
     judge_client = build_openai_client(
         judge_cfg,
-        fallback_base_url=settings.llm_base_url,
-        fallback_key=settings.llm_api_key,
+        fallback_base_url=base_url,
+        fallback_key=api_key,
     )
-    judge_model = judge_cfg.get("model") or settings.yaml_config.get("llm", {}).get(
-        "model", "gpt-4o-mini"
+    judge_model = (
+        judge_cfg.get("model")
+        or os.environ.get("LLM_MODEL")
+        or "gpt-4o-mini"
     )
     llm = llm_factory(judge_model, client=judge_client)
 
@@ -291,8 +313,8 @@ def run_ragas(
     if any(METRIC_SPECS[n]["needs_embeddings"] for n in metric_names):
         emb_client = build_openai_client(
             embeddings_cfg or judge_cfg,
-            fallback_base_url=settings.llm_base_url,
-            fallback_key=settings.llm_api_key,
+            fallback_base_url=base_url,
+            fallback_key=api_key,
         )
         emb_model = (embeddings_cfg or {}).get("model", "text-embedding-3-small")
         embeddings = embedding_factory("openai", model=emb_model, client=emb_client)
@@ -344,6 +366,7 @@ def main() -> None:
         help="Collect RAG answers only; skip RAGAS judge",
     )
     args = parser.parse_args()
+    load_dotenv_file()
 
     paths = list_dataset_paths(args.dataset)
     reports: list[dict[str, Any]] = []

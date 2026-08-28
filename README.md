@@ -130,34 +130,51 @@ python scripts/benchmark_retrieval.py "질의" --iterations 10
 
 ### RAGAS 품질 평가
 
-end-to-end 답변 품질(Faithfulness, Context Recall/Precision 등)을 YAML 데이터셋으로 측정합니다.
+YAML 문항으로 RAG 답변을 모은 뒤 Faithfulness / Context Recall / Precision을 측정합니다.  
+**검색·생성은 Docker API**, **채점(judge)은 호스트에서 `.env`의 LLM**을 씁니다. conda `(base)`에 `pip install` 하지 말고 **uv**로 eval 패키지만 붙입니다.
+
+전제: 스택이 떠 있고 (`http://localhost:7500`), 평가할 `group_id` 코퍼스가 ingest 되어 있다.
 
 ```bash
-# 템플릿 복사 후 question / ground_truth 수정
-cp tests/eval/ragas_template.yaml tests/eval/ragas_input/my_eval.yaml
+# RAG만 (judge 없음). 리포트는 results/ragas_<이름>_<시각>.json
+# --no-project: 이 레포 전체(torch 등)를 sync하지 않음
+uv run --no-project --with ragas --with openai --with httpx --with pyyaml \
+  python scripts/eval_ragas.py tests/eval/ragas_input --dry-run
 
-# RAG만 확인 (judge LLM 비용 없음). 리포트는 results/ragas_<이름>_<시각>.json
-rag-eval tests/eval/ragas_input/docuops_tax.yaml --dry-run
-
-# ragas_input 폴더의 YAML 전부
-rag-eval tests/eval/ragas_input --dry-run
-
-# RAGAS 전체 (스택 + LLM_API_KEY 필요, group_id 코퍼스 ingest 선행)
-rag-eval tests/eval/ragas_input/docuops_tax.yaml
-
-# 호스트에서 패키지 설치 후 in-process 호출 (청크 전문 → faithfulness에 유리)
-rag-eval tests/eval/ragas_input/docuops_tax.yaml --runner direct
+# RAGAS 채점까지 (judge LLM 호출)
+uv run --no-project --with ragas --with openai --with httpx --with pyyaml \
+  python scripts/eval_ragas.py tests/eval/ragas_input
 ```
 
-| 옵션 | 설명 |
-|------|------|
-| `defaults.runner: api` | `/v1/query` HTTP (기본). `api_url` 기본 `http://localhost:7500` |
-| `defaults.runner: direct` | in-process `QueryService`, chunk **전문** (`pip install -e .`) |
-| `defaults.metrics` | `faithfulness`, `context_recall`, `context_precision`, `answer_relevancy` |
-| `defaults.thresholds` | 미달 시 exit code 1 |
-| `--output` | JSON 경로. 생략 시 `results/ragas_<dataset>_<timestamp>.json` |
+데이터셋만 추가할 때는 YAML을 [`tests/eval/ragas_input/`](tests/eval/ragas_input/)에 두면 폴더 실행에 포함됩니다. 템플릿: [`tests/eval/ragas_template.yaml`](tests/eval/ragas_template.yaml).
 
-템플릿: [`tests/eval/ragas_template.yaml`](tests/eval/ragas_template.yaml) · 입력 폴더: [`tests/eval/ragas_input/`](tests/eval/ragas_input/)
+```bash
+cp tests/eval/ragas_template.yaml tests/eval/ragas_input/my_eval.yaml
+```
+
+venv를 고정하려면 (프로젝트 `.venv`가 아니라 eval 전용):
+
+```bash
+uv venv .venv-eval
+uv pip install --python .venv-eval ragas openai httpx pyyaml
+.venv-eval/bin/python scripts/eval_ragas.py tests/eval/ragas_input --dry-run
+```
+
+`uv run`만 치거나 `uv sync --extra dev`를 하면 `pyproject.toml`의 torch·sentence-transformers까지 받습니다. eval-only에는 `--no-project`를 씁니다.
+
+| | 설명 |
+|--|------|
+| `--dry-run` | `/v1/query`만 호출. RAGAS 점수 없음 (연결·적재 확인용) |
+| 러너 `api` (기본) | `POST http://localhost:7500/v1/query`. 호스트에 `rag` 패키지 불필요 |
+| 러너 `direct` | in-process `QueryService`. `pip install -e .` + DB/모델 필요 |
+| 리포트 | `--output` 생략 시 `results/ragas_<dataset>_<timestamp>.json` |
+| judge | `.env`의 `LLM_API_KEY` / `LLM_BASE_URL`. YAML `judge.model`은 **그 엔드포인트에 있는 모델 id** |
+| `defaults.embeddings` | `answer_relevancy`를 켤 때만 사용. 검색용 BGE-M3와 무관 |
+
+기본 메트릭은 `faithfulness`, `context_recall`, `context_precision` (judge LLM만). `answer_relevancy`는 임베딩 API가 추가로 필요하다.
+
+DocuOps 세무 매뉴얼 세트: [`tests/eval/ragas_input/docuops_tax.yaml`](tests/eval/ragas_input/docuops_tax.yaml) (`group_id=dc`).
+
 
 ---
 

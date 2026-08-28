@@ -1,14 +1,14 @@
 # RAGAS evaluation dataset template
 #
 # Usage:
-#   rag-eval tests/eval/ragas_template.yaml
-#   rag-eval tests/eval/ragas_template.yaml --dry-run
-#   rag-eval tests/eval/ragas_template.yaml --runner direct
+#   uv run --no-project --with ragas --with openai --with httpx --with pyyaml \
+#     python scripts/eval_ragas.py tests/eval/ragas_template.yaml --dry-run
+#   python scripts/eval_ragas.py tests/eval/ragas_template.yaml --runner direct
 #
 # Prerequisites:
 #   - RAG stack up (Postgres + indexed corpus for your group_id)
-#   - LLM_API_KEY / LLM_BASE_URL for generation AND RAGAS judge
-#   - pip install -e ".[dev]"  (judge only; api runner does not need in-process rag)
+#   - LLM_API_KEY / LLM_BASE_URL (.env). judge.model must exist on that endpoint
+#   - uv run --with ragas --with openai … (see README). api runner does not need in-process rag
 #
 # Runner:
 #   api    — HTTP POST /v1/query (default; citation snippets as context)
@@ -42,7 +42,7 @@ defaults:
     answer_relevancy: 0.70
 
   judge:
-    model: gpt-4o-mini
+    model: Qwen/Qwen3.5-35B-A3B-FP8
     base_url: null
     api_key_env: LLM_API_KEY
     temperature: 0.0
