@@ -6,6 +6,7 @@ import pytest
 
 from scripts.eval_ragas import (
     aggregate_ragas_scores,
+    annotate_raw_scores,
     attach_item_scores,
     citation_records,
     context_texts,
@@ -62,7 +63,7 @@ def test_context_texts_prefers_content():
 
 def test_resolve_defaults_citation_flags():
     defaults = resolve_defaults({})
-    assert defaults["snippet"] is True
+    assert defaults["snippet"] is False
     assert defaults["content"] is True
 
 
@@ -74,6 +75,22 @@ def test_attach_item_scores_on_traces():
     )
     assert traces[0]["scores"] == {"faithfulness": 1.0}
     assert traces[1]["scores"] == {"faithfulness": None}
+
+
+def test_annotate_raw_scores_adds_item_id():
+    traces = [{"id": "q1-optimized"}, {"id": "q1-user"}]
+    raw = annotate_raw_scores(
+        [{"faithfulness": 0.5, "context_recall": 1.0}, {"faithfulness": 1.0}],
+        traces,
+    )
+    assert raw[0] == {
+        "id": "q1-optimized",
+        "faithfulness": 0.5,
+        "context_recall": 1.0,
+    }
+    assert raw[1]["id"] == "q1-user"
+    attach_item_scores(traces, raw)
+    assert traces[0]["scores"] == {"faithfulness": 0.5, "context_recall": 1.0}
 
 
 def test_aggregate_ragas_scores_from_list():

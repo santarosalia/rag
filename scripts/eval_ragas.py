@@ -94,7 +94,7 @@ def resolve_defaults(data: dict[str, Any]) -> dict[str, Any]:
         "group_id": defaults.get("group_id"),
         "top_k": defaults.get("top_k", 5),
         "include_citations": defaults.get("include_citations", True),
-        "snippet": defaults.get("snippet", True),
+        "snippet": defaults.get("snippet", False),
         "content": defaults.get("content", True),
         "metrics": defaults.get(
             "metrics", ["faithfulness", "context_recall", "context_precision"]
@@ -186,12 +186,31 @@ def context_texts(citations: list[dict[str, Any]]) -> list[str]:
     return texts
 
 
+def annotate_raw_scores(raw_scores: Any, traces: list[dict[str, Any]]) -> Any:
+    """Prefix each per-item score dict with the YAML item id."""
+    if not isinstance(raw_scores, list):
+        return raw_scores
+    annotated: list[Any] = []
+    for i, row in enumerate(raw_scores):
+        if not isinstance(row, dict):
+            annotated.append(row)
+            continue
+        item_id = traces[i].get("id") if i < len(traces) else None
+        metrics = {k: v for k, v in row.items() if k != "id"}
+        if item_id is None:
+            annotated.append(metrics)
+        else:
+            annotated.append({"id": item_id, **metrics})
+    return annotated
+
+
 def attach_item_scores(traces: list[dict[str, Any]], raw_scores: Any) -> None:
     if not isinstance(raw_scores, list):
         return
     for trace, row in zip(traces, raw_scores):
         if isinstance(row, dict):
-            trace["scores"] = json_safe(row)
+            metrics = {k: v for k, v in row.items() if k != "id"}
+            trace["scores"] = json_safe(metrics)
 
 
 async def query_direct(
@@ -523,6 +542,9 @@ def main() -> None:
             report["thresholds"] = thresholds
             report["passed"] = passed
             report["all_thresholds_met"] = all(passed.values()) if passed else None
+            ragas_details["raw"] = annotate_raw_scores(
+                ragas_details.get("raw"), traces
+            )
             report["ragas"] = ragas_details
             attach_item_scores(traces, ragas_details.get("raw"))
 

@@ -29,7 +29,7 @@ defaults:
   group_id: null
   top_k: 5
   include_citations: true
-  snippet: true
+  snippet: false
   content: true
 
   metrics:
