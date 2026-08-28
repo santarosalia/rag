@@ -207,7 +207,7 @@ def annotate_raw_scores(raw_scores: Any, traces: list[dict[str, Any]]) -> Any:
 def attach_item_scores(traces: list[dict[str, Any]], raw_scores: Any) -> None:
     if not isinstance(raw_scores, list):
         return
-    for trace, row in zip(traces, raw_scores):
+    for trace, row in zip(traces, raw_scores, strict=True):
         if isinstance(row, dict):
             metrics = {k: v for k, v in row.items() if k != "id"}
             trace["scores"] = json_safe(metrics)
