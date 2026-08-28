@@ -1,15 +1,40 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from scripts.eval_ragas import (
+    aggregate_ragas_scores,
     default_output_path,
     list_dataset_paths,
     load_dataset,
     resolve_defaults,
     validate_rows_for_metrics,
 )
+
+
+def test_aggregate_ragas_scores_from_list():
+    result = SimpleNamespace(
+        scores=[
+            {"faithfulness": 1.0, "context_recall": 0.5},
+            {"faithfulness": 0.5, "context_recall": float("nan")},
+        ],
+        _repr_dict={},
+    )
+    scores, raw = aggregate_ragas_scores(result)
+    assert scores["faithfulness"] == 0.75
+    assert scores["context_recall"] == 0.5
+    assert raw is result.scores
+
+
+def test_aggregate_ragas_scores_from_repr_dict():
+    result = SimpleNamespace(
+        scores=[{"faithfulness": 1.0}, {"faithfulness": 0.0}],
+        _repr_dict={"faithfulness": 0.5},
+    )
+    scores, _ = aggregate_ragas_scores(result)
+    assert scores == {"faithfulness": 0.5}
 
 
 def test_resolve_defaults_runner_is_api():

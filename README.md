@@ -168,7 +168,7 @@ uv pip install --python .venv-eval ragas openai httpx pyyaml
 | 러너 `api` (기본) | `POST http://localhost:7500/v1/query`. 호스트에 `rag` 패키지 불필요 |
 | 러너 `direct` | in-process `QueryService`. `pip install -e .` + DB/모델 필요 |
 | 리포트 | `--output` 생략 시 `results/ragas_<dataset>_<timestamp>.json` |
-| judge | `.env`의 `LLM_API_KEY` / `LLM_BASE_URL`. YAML `judge.model`은 **그 엔드포인트에 있는 모델 id** |
+| judge | `.env`의 `LLM_API_KEY` / `LLM_BASE_URL`. YAML `judge.model`은 **그 엔드포인트에 있는 모델 id**. `judge.max_tokens` 기본 4096 (채점 JSON이 잘리면 올림) |
 | `defaults.embeddings` | `answer_relevancy`를 켤 때만 사용. 검색용 BGE-M3와 무관 |
 
 기본 메트릭은 `faithfulness`, `context_recall`, `context_precision` (judge LLM만). `answer_relevancy`는 임베딩 API가 추가로 필요하다.

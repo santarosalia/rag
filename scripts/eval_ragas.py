@@ -115,18 +115,18 @@ def build_metrics(
     llm: Any,
     embeddings: Any | None,
 ) -> tuple[list[Any], list[str]]:
-    from ragas.metrics.collections import (
-        AnswerRelevancy,
-        ContextPrecisionWithReference,
-        ContextRecall,
-        Faithfulness,
-    )
+    # ragas 0.4 `evaluate()` still requires legacy Metric objects.
+    # ragas.metrics.collections.* is the newer API and is not a Metric subclass.
+    from ragas.metrics._answer_relevance import AnswerRelevancy
+    from ragas.metrics._context_precision import ContextPrecision
+    from ragas.metrics._context_recall import ContextRecall
+    from ragas.metrics._faithfulness import Faithfulness
 
     classes = {
         "faithfulness": Faithfulness,
         "answer_relevancy": AnswerRelevancy,
         "context_recall": ContextRecall,
-        "context_precision": ContextPrecisionWithReference,
+        "context_precision": ContextPrecision,
     }
 
     metrics: list[Any] = []
@@ -286,6 +286,62 @@ def validate_rows_for_metrics(rows: list[dict[str, Any]], metric_names: list[str
             )
 
 
+def aggregate_ragas_scores(result: Any) -> tuple[dict[str, float], Any]:
+    """RAGAS 0.4 `EvaluationResult.scores` is a list of per-sample dicts, not a mapping."""
+    raw = getattr(result, "scores", None)
+    means = getattr(result, "_repr_dict", None)
+    if isinstance(means, dict) and means:
+        scores: dict[str, float] = {}
+        for key, value in means.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if number == number:  # drop NaN
+                scores[key] = number
+        if scores:
+            return scores, raw
+
+    if isinstance(raw, dict):
+        scores = {}
+        for key, value in raw.items():
+            try:
+                scores[key] = float(value)
+            except (TypeError, ValueError):
+                continue
+        return scores, raw
+
+    if isinstance(raw, list) and raw:
+        scores = {}
+        for key in raw[0]:
+            values: list[float] = []
+            for row in raw:
+                try:
+                    number = float(row[key])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if number == number:
+                    values.append(number)
+            if values:
+                scores[key] = sum(values) / len(values)
+        return scores, raw
+
+    return {}, raw
+
+
+def json_safe(value: Any) -> Any:
+    """Replace NaN/Inf so reports stay valid JSON."""
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        return value
+    if isinstance(value, dict):
+        return {k: json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [json_safe(v) for v in value]
+    return value
+
+
 def run_ragas(
     rows: list[dict[str, Any]],
     metric_names: list[str],
@@ -307,7 +363,12 @@ def run_ragas(
         or os.environ.get("LLM_MODEL")
         or "gpt-4o-mini"
     )
-    llm = llm_factory(judge_model, client=judge_client)
+    llm = llm_factory(
+        judge_model,
+        client=judge_client,
+        temperature=judge_cfg.get("temperature", 0.0),
+        max_tokens=judge_cfg.get("max_tokens", 4096),
+    )
 
     embeddings = None
     if any(METRIC_SPECS[n]["needs_embeddings"] for n in metric_names):
@@ -323,14 +384,11 @@ def run_ragas(
     dataset = EvaluationDataset.from_list(rows)
     result = evaluate(dataset=dataset, metrics=metrics, llm=llm, show_progress=True)
 
-    scores: dict[str, float] = {}
-    for name in resolved_names:
-        if name in result.scores:
-            scores[name] = float(result.scores[name])
-
+    scores, raw_scores = aggregate_ragas_scores(result)
     details = {
         "scores": scores,
-        "raw": {k: float(v) for k, v in result.scores.items()},
+        "raw": json_safe(raw_scores),
+        "metric_names": resolved_names,
     }
     return scores, details
 
@@ -430,7 +488,10 @@ def main() -> None:
     output = args.output or default_output_path(args.dataset)
     output.parent.mkdir(parents=True, exist_ok=True)
     payload: Any = reports[0] if len(reports) == 1 else {"datasets": reports}
-    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    output.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
     print(f"\nWrote {output}")
 
     if any_fail:
