@@ -15,6 +15,8 @@ defaults:
   group_id: dc
   top_k: 5
   include_citations: true
+  snippet: true
+  content: true
 
   metrics:
     - faithfulness

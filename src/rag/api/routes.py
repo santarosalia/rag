@@ -20,6 +20,7 @@ from rag.models.schemas import (
     QueryResponse,
     RetrieveRequest,
     RetrieveResponse,
+    project_citation_bodies,
 )
 from rag.observability.metrics import QUERY_COUNTER
 from rag.retrieval.pipeline import RetrievalPipeline
@@ -229,7 +230,9 @@ async def retrieve(
             query=request.query,
             mode=request.mode,
             backend=pipeline.backend_name,
-            citations=citations,
+            citations=project_citation_bodies(
+                citations, snippet=request.snippet, content=request.content
+            ),
             latency_ms=latency,
         )
     except HTTPException:
@@ -253,7 +256,16 @@ async def query(
             top_k=request.top_k,
         )
         QUERY_COUNTER.labels(endpoint="query", status="success").inc()
-        return response
+        citations = (
+            []
+            if not request.include_citations
+            else project_citation_bodies(
+                response.citations,
+                snippet=request.snippet,
+                content=request.content,
+            )
+        )
+        return response.model_copy(update={"citations": citations})
     except HTTPException:
         raise
     except Exception:

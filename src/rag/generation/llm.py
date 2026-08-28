@@ -30,7 +30,8 @@ def _truncate_tokens(text: str, max_tokens: int) -> str:
 def build_context(citations: list[Citation], max_tokens: int = 4096) -> str:
     """Numbered context from full chunk text, truncated to a token budget.
 
-    API ``snippet`` stays short. Generation uses ``content`` when set.
+    API ``snippet`` is a 300-char preview. Generation uses ``content`` when set.
+    Request flags ``snippet`` / ``content`` choose which fields appear in JSON.
     Rank order is kept; the last included chunk may be cut mid-text.
     """
     parts: list[str] = []

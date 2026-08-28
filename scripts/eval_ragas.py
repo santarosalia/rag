@@ -94,6 +94,8 @@ def resolve_defaults(data: dict[str, Any]) -> dict[str, Any]:
         "group_id": defaults.get("group_id"),
         "top_k": defaults.get("top_k", 5),
         "include_citations": defaults.get("include_citations", True),
+        "snippet": defaults.get("snippet", True),
+        "content": defaults.get("content", True),
         "metrics": defaults.get(
             "metrics", ["faithfulness", "context_recall", "context_precision"]
         ),
@@ -148,11 +150,55 @@ def build_metrics(
     return metrics, resolved
 
 
+def citation_records(raw: Any) -> list[dict[str, Any]]:
+    """Keep rank/filename/page/score and whatever body fields the API returned."""
+    records: list[dict[str, Any]] = []
+    for item in raw or []:
+        if hasattr(item, "model_dump"):
+            data = item.model_dump()
+        elif isinstance(item, dict):
+            data = item
+        else:
+            continue
+        record: dict[str, Any] = {
+            "rank": data.get("rank"),
+            "filename": data.get("filename") or "",
+            "page": data.get("page"),
+            "score": data.get("score"),
+            "chunk_id": data.get("chunk_id"),
+            "doc_id": data.get("doc_id"),
+        }
+        if data.get("snippet") is not None:
+            record["snippet"] = str(data.get("snippet") or "").strip()
+        if data.get("content") is not None:
+            record["content"] = str(data.get("content") or "").strip()
+        records.append(record)
+    return records
+
+
+def context_texts(citations: list[dict[str, Any]]) -> list[str]:
+    """RAGAS retrieved_contexts: full chunk content, snippet only as fallback."""
+    texts: list[str] = []
+    for citation in citations:
+        body = str(citation.get("content") or citation.get("snippet") or "").strip()
+        if body:
+            texts.append(body)
+    return texts
+
+
+def attach_item_scores(traces: list[dict[str, Any]], raw_scores: Any) -> None:
+    if not isinstance(raw_scores, list):
+        return
+    for trace, row in zip(traces, raw_scores):
+        if isinstance(row, dict):
+            trace["scores"] = json_safe(row)
+
+
 async def query_direct(
     question: str,
     group_id: str | None,
     top_k: int,
-) -> tuple[str, list[str], dict[str, float], str]:
+) -> tuple[str, list[str], dict[str, float], str, list[dict[str, Any]]]:
     try:
         from rag.generation.service import QueryService
     except ModuleNotFoundError as e:
@@ -167,12 +213,14 @@ async def query_direct(
     service = QueryService()
     try:
         response = await service.query(query=question, group_id=group_id, top_k=top_k)
-        contexts = [
-            (c.content or c.snippet).strip()
-            for c in response.citations
-            if (c.content or c.snippet).strip()
-        ]
-        return response.answer, contexts, response.latency_ms, response.backend
+        citations = citation_records(response.citations)
+        return (
+            response.answer,
+            context_texts(citations),
+            response.latency_ms,
+            response.backend,
+            citations,
+        )
     finally:
         await service.retrieval.close()
 
@@ -183,11 +231,15 @@ def query_api(
     group_id: str | None,
     top_k: int,
     include_citations: bool,
-) -> tuple[str, list[str], dict[str, float], str]:
+    snippet: bool,
+    content: bool,
+) -> tuple[str, list[str], dict[str, float], str, list[dict[str, Any]]]:
     payload: dict[str, Any] = {
         "query": question,
         "top_k": top_k,
         "include_citations": include_citations,
+        "snippet": snippet,
+        "content": content,
     }
     if group_id:
         payload["group_id"] = group_id
@@ -195,16 +247,13 @@ def query_api(
     response = client.post("/v1/query", json=payload)
     response.raise_for_status()
     data = response.json()
-    contexts = [
-        str(c.get("snippet", "")).strip()
-        for c in data.get("citations", [])
-        if str(c.get("snippet", "")).strip()
-    ]
+    citations = citation_records(data.get("citations") or [])
     return (
         data.get("answer", ""),
-        contexts,
+        context_texts(citations),
         data.get("latency_ms") or {},
         data.get("backend", "unknown"),
+        citations,
     )
 
 
@@ -232,17 +281,19 @@ async def collect_samples(
             reference = (item.get("ground_truth") or item.get("reference") or "").strip()
 
             if runner == "direct":
-                answer, contexts, latency_ms, backend = await query_direct(
+                answer, contexts, latency_ms, backend, citations = await query_direct(
                     question, group_id, top_k
                 )
             else:
                 assert client is not None
-                answer, contexts, latency_ms, backend = query_api(
+                answer, contexts, latency_ms, backend, citations = query_api(
                     client,
                     question,
                     group_id,
                     top_k,
                     defaults["include_citations"],
+                    defaults["snippet"],
+                    defaults["content"],
                 )
 
             if not contexts:
@@ -263,9 +314,10 @@ async def collect_samples(
                     "question": question,
                     "group_id": group_id,
                     "backend": backend,
-                    "context_count": len(contexts),
+                    "context_count": len(citations) or len(contexts),
                     "latency_ms": latency_ms,
-                    "answer_preview": answer[:200],
+                    "answer": answer,
+                    "citations": citations,
                 }
             )
     finally:
@@ -472,6 +524,7 @@ def main() -> None:
             report["passed"] = passed
             report["all_thresholds_met"] = all(passed.values()) if passed else None
             report["ragas"] = ragas_details
+            attach_item_scores(traces, ragas_details.get("raw"))
 
             print("\n--- RAGAS scores ---")
             for name, value in scores.items():

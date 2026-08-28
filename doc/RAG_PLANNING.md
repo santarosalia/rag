@@ -215,7 +215,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 ### 4.6 Generation (LLM)
 
 - **Provider:** OpenAI-compatible API (설정 교체 가능)
-- **Context budget:** 4096 tokens (tiktoken `cl100k_base`). 청크 **전문**을 순위대로 넣고 넘치면 마지막만 자른다. API `snippet`은 미리보기(300자)만.
+- **Context budget:** 4096 tokens (tiktoken `cl100k_base`). 청크 **전문**을 순위대로 넣고 넘치면 마지막만 자른다. API는 `snippet`(미리보기 300자, 기본 on) / `content`(전문, 기본 off) boolean으로 응답 필드를 고른다.
 - **Citation format:** `[1]`, `[2]` — context 번호와 매칭
 - **System prompt:** context 기반 답변, 정보 부족 시 명시, 질문 언어로 답변
 
@@ -260,7 +260,9 @@ score(chunk) = Σ  1 / (k + rank_i)
 {
   "query": "하이브리드 검색이란?",
   "group_id": "ga",
-  "top_k": 5
+  "top_k": 5,
+  "snippet": true,
+  "content": false
 }
 
 // Response

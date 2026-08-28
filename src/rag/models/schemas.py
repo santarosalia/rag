@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from rag.groups.ids import GROUP_ID_MAX_LENGTH, GROUP_ID_PATTERN_STR
 
@@ -59,6 +59,8 @@ class RetrieveRequest(BaseModel):
     group_id: GroupId | None = None
     top_k: int | None = Field(default=None, ge=1, le=100)
     rerank: bool = True
+    snippet: bool = True
+    content: bool = False
 
 
 class Citation(BaseModel):
@@ -67,9 +69,35 @@ class Citation(BaseModel):
     filename: str
     page: int | None
     score: float
-    snippet: str
+    snippet: str | None = None
     rank: int
-    content: str = Field(default="", exclude=True)
+    content: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_bodies(self, serializer):
+        data = serializer(self)
+        if data.get("snippet") is None:
+            data.pop("snippet", None)
+        if data.get("content") is None:
+            data.pop("content", None)
+        return data
+
+
+def project_citation_bodies(
+    citations: list[Citation],
+    *,
+    snippet: bool,
+    content: bool,
+) -> list[Citation]:
+    return [
+        citation.model_copy(
+            update={
+                "snippet": citation.snippet if snippet else None,
+                "content": citation.content if content else None,
+            }
+        )
+        for citation in citations
+    ]
 
 
 class RetrieveResponse(BaseModel):
@@ -85,6 +113,8 @@ class QueryRequest(BaseModel):
     group_id: GroupId | None = None
     top_k: int | None = Field(default=None, ge=1, le=20)
     include_citations: bool = True
+    snippet: bool = True
+    content: bool = False
 
 
 class QueryResponse(BaseModel):

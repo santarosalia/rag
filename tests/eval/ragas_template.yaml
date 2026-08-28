@@ -11,7 +11,7 @@
 #   - uv run --with ragas --with openai … (see README). api runner does not need in-process rag
 #
 # Runner:
-#   api    — HTTP POST /v1/query (default; citation snippets as context)
+#   api    — HTTP POST /v1/query (default; citation content as RAGAS context)
 #   direct — in-process QueryService (full chunk text; needs pip install -e .)
 #
 # Metrics (defaults.metrics):
@@ -29,6 +29,8 @@ defaults:
   group_id: null
   top_k: 5
   include_citations: true
+  snippet: true
+  content: true
 
   metrics:
     - faithfulness

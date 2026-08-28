@@ -45,7 +45,7 @@ def test_build_context_uses_full_content_not_snippet():
     assert "12345" in context
     assert "short preview" not in context
     dumped = citations[0].model_dump()
-    assert "content" not in dumped
+    assert dumped["content"].startswith("full table")
     assert dumped["snippet"] == "short preview"
 
 

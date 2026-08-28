@@ -6,12 +6,74 @@ import pytest
 
 from scripts.eval_ragas import (
     aggregate_ragas_scores,
+    attach_item_scores,
+    citation_records,
+    context_texts,
     default_output_path,
     list_dataset_paths,
     load_dataset,
     resolve_defaults,
     validate_rows_for_metrics,
 )
+
+
+def test_citation_records_from_api_payload():
+    records = citation_records(
+        [
+            {
+                "rank": 1,
+                "filename": "manual.md",
+                "page": 3,
+                "score": 0.91,
+                "chunk_id": "c1",
+                "doc_id": "d1",
+                "snippet": "  6월에 부과  ",
+                "extra": "ignore",
+            }
+        ]
+    )
+    assert records == [
+        {
+            "rank": 1,
+            "filename": "manual.md",
+            "page": 3,
+            "score": 0.91,
+            "chunk_id": "c1",
+            "doc_id": "d1",
+            "snippet": "6월에 부과",
+        }
+    ]
+
+
+def test_context_texts_prefers_content():
+    records = citation_records(
+        [
+            {
+                "rank": 1,
+                "filename": "manual.md",
+                "snippet": "preview",
+                "content": "  full chunk  ",
+            }
+        ]
+    )
+    assert records[0]["content"] == "full chunk"
+    assert context_texts(records) == ["full chunk"]
+
+
+def test_resolve_defaults_citation_flags():
+    defaults = resolve_defaults({})
+    assert defaults["snippet"] is True
+    assert defaults["content"] is True
+
+
+def test_attach_item_scores_on_traces():
+    traces = [{"id": "q1"}, {"id": "q2"}]
+    attach_item_scores(
+        traces,
+        [{"faithfulness": 1.0}, {"faithfulness": float("nan")}],
+    )
+    assert traces[0]["scores"] == {"faithfulness": 1.0}
+    assert traces[1]["scores"] == {"faithfulness": None}
 
 
 def test_aggregate_ragas_scores_from_list():

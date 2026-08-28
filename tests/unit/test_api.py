@@ -136,3 +136,99 @@ async def test_retrieve_without_auth(app, monkeypatch):
         assert data["mode"] == SearchMode.HYBRID
         assert data["backend"] == "pgvector"
         assert len(data["citations"]) == 1
+        assert data["citations"][0]["snippet"] == "test snippet"
+        assert "content" not in data["citations"][0]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_includes_content_when_requested(app, monkeypatch):
+    from rag.models.schemas import Citation
+
+    async def mock_retrieve(self, **kwargs):
+        return (
+            [
+                Citation(
+                    chunk_id="c1",
+                    doc_id="d1",
+                    filename="test.txt",
+                    page=None,
+                    score=0.95,
+                    snippet="test snippet",
+                    rank=1,
+                    content="full chunk body",
+                )
+            ],
+            {"total_ms": 10.0},
+        )
+
+    class MockPipeline:
+        backend_name = "pgvector"
+        retrieve = mock_retrieve
+
+    monkeypatch.setattr(
+        "rag.api.routes.RetrievalPipeline",
+        lambda **kw: MockPipeline(),
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/retrieve",
+            json={"query": "test query", "mode": "hybrid", "content": True, "snippet": False},
+        )
+        assert response.status_code == 200
+        citation = response.json()["citations"][0]
+        assert citation["content"] == "full chunk body"
+        assert "snippet" not in citation
+
+
+@pytest.mark.asyncio
+async def test_query_citation_flags(app, monkeypatch):
+    from rag.models.schemas import Citation, QueryResponse
+
+    async def mock_query(self, **kwargs):
+        return QueryResponse(
+            query="q",
+            answer="a",
+            backend="pgvector",
+            citations=[
+                Citation(
+                    chunk_id="c1",
+                    doc_id="d1",
+                    filename="test.txt",
+                    page=1,
+                    score=0.9,
+                    snippet="preview",
+                    rank=1,
+                    content="full chunk body",
+                )
+            ],
+            latency_ms={"total_ms": 1.0},
+        )
+
+    class MockService:
+        query = mock_query
+
+    monkeypatch.setattr("rag.api.routes.QueryService", lambda **kw: MockService())
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        defaulted = await client.post("/v1/query", json={"query": "q"})
+        assert defaulted.status_code == 200
+        citation = defaulted.json()["citations"][0]
+        assert citation["snippet"] == "preview"
+        assert "content" not in citation
+
+        both = await client.post(
+            "/v1/query",
+            json={"query": "q", "snippet": True, "content": True},
+        )
+        citation = both.json()["citations"][0]
+        assert citation["snippet"] == "preview"
+        assert citation["content"] == "full chunk body"
+
+        hidden = await client.post(
+            "/v1/query",
+            json={"query": "q", "include_citations": False, "content": True},
+        )
+        assert hidden.json()["citations"] == []

@@ -12,7 +12,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 |------|------|
 | **Hybrid Search** | pgvector kNN(BGE-M3) + PostgreSQL FTS(Kiwi) → RRF 융합 |
 | **Rerank** | Cross-encoder `bge-reranker-v2-m3` (top-50 → top-5) |
-| **Citation** | chunk_id, filename, page, snippet 포함 |
+| **Citation** | chunk_id, filename, page. `/v1/query`·`/v1/retrieve` body `snippet`/`content`(bool)로 본문 필드 선택. 기본 snippet만 |
 | **Groups** | 평면 문서 그룹. 생성 시 외부 문자열 ID 지정 가능 |
 | **Async Ingest** | 원본(MarkItDown) 또는 파싱 Markdown → chunk/embed (Celery) |
 | **Single DB** | 메타데이터 + 벡터 + FTS 모두 PostgreSQL |
@@ -167,7 +167,7 @@ uv pip install --python .venv-eval ragas openai httpx pyyaml
 | `--dry-run` | `/v1/query`만 호출. RAGAS 점수 없음 (연결·적재 확인용) |
 | 러너 `api` (기본) | `POST http://localhost:7500/v1/query`. 호스트에 `rag` 패키지 불필요 |
 | 러너 `direct` | in-process `QueryService`. `pip install -e .` + DB/모델 필요 |
-| 리포트 | `--output` 생략 시 `results/ragas_<dataset>_<timestamp>.json` |
+| 리포트 | `--output` 생략 시 `results/ragas_<dataset>_<timestamp>.json`. `traces[]`에 문항별 `answer`·`citations`(rank/filename/page/snippet/content)·점수 |
 | judge | `.env`의 `LLM_API_KEY` / `LLM_BASE_URL`. YAML `judge.model`은 **그 엔드포인트에 있는 모델 id**. `judge.max_tokens` 기본 4096 (채점 JSON이 잘리면 올림) |
 | `defaults.embeddings` | `answer_relevancy`를 켤 때만 사용. 검색용 BGE-M3와 무관 |
 
