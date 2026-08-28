@@ -67,6 +67,7 @@ packages = ["src/rag"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
     "integration: integration tests requiring external services",

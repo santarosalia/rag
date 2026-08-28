@@ -134,26 +134,30 @@ end-to-end 답변 품질(Faithfulness, Context Recall/Precision 등)을 YAML 데
 
 ```bash
 # 템플릿 복사 후 question / ground_truth 수정
-cp tests/eval/ragas_template.yaml tests/eval/my_eval.yaml
+cp tests/eval/ragas_template.yaml tests/eval/ragas_input/my_eval.yaml
 
-# RAG만 확인 (judge LLM 비용 없음)
-rag-eval tests/eval/my_eval.yaml --dry-run
+# RAG만 확인 (judge LLM 비용 없음). 리포트는 results/ragas_<이름>_<시각>.json
+rag-eval tests/eval/ragas_input/docuops_tax.yaml --dry-run
+
+# ragas_input 폴더의 YAML 전부
+rag-eval tests/eval/ragas_input --dry-run
 
 # RAGAS 전체 (스택 + LLM_API_KEY 필요, group_id 코퍼스 ingest 선행)
-rag-eval tests/eval/my_eval.yaml --output results/ragas_run.json
+rag-eval tests/eval/ragas_input/docuops_tax.yaml
 
-# HTTP로 RAG 호출 (snippet만 context → faithfulness는 direct보다 낮을 수 있음)
-rag-eval tests/eval/my_eval.yaml --runner api --api-url http://localhost:8000
+# 호스트에서 패키지 설치 후 in-process 호출 (청크 전문 → faithfulness에 유리)
+rag-eval tests/eval/ragas_input/docuops_tax.yaml --runner direct
 ```
 
 | 옵션 | 설명 |
 |------|------|
-| `defaults.runner: direct` | in-process `QueryService`, chunk **전문** (기본, 권장) |
-| `defaults.runner: api` | `/v1/query` HTTP, citation snippet만 |
+| `defaults.runner: api` | `/v1/query` HTTP (기본). `api_url` 기본 `http://localhost:7500` |
+| `defaults.runner: direct` | in-process `QueryService`, chunk **전문** (`pip install -e .`) |
 | `defaults.metrics` | `faithfulness`, `context_recall`, `context_precision`, `answer_relevancy` |
 | `defaults.thresholds` | 미달 시 exit code 1 |
+| `--output` | JSON 경로. 생략 시 `results/ragas_<dataset>_<timestamp>.json` |
 
-템플릿: [`tests/eval/ragas_template.yaml`](tests/eval/ragas_template.yaml) · 키워드 gold: [`tests/eval/docuops_tax.yaml`](tests/eval/docuops_tax.yaml)
+템플릿: [`tests/eval/ragas_template.yaml`](tests/eval/ragas_template.yaml) · 입력 폴더: [`tests/eval/ragas_input/`](tests/eval/ragas_input/)
 
 ---
 

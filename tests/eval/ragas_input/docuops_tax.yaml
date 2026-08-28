@@ -1,0 +1,142 @@
+# DocuOps 벤치마크 — 세무과 업무 매뉴얼 (RAGAS input)
+#
+# Usage:
+#   rag-eval tests/eval/ragas_input/docuops_tax.yaml
+#   rag-eval tests/eval/ragas_input/docuops_tax.yaml --dry-run
+#   rag-eval tests/eval/ragas_input --dry-run
+#   rag-eval tests/eval/ragas_input/docuops_tax.yaml --runner direct
+#
+# 문항당 최적화 질의 + 실사용 질의 (동일 ground_truth). group_id=dc 코퍼스 선행 적재.
+
+name: docuops-tax
+description: 세무과 업무 매뉴얼 DocuOps 10문항 × 최적화/실사용 질의
+
+defaults:
+  runner: api
+  api_url: http://localhost:7500
+  group_id: dc
+  top_k: 5
+  include_citations: true
+
+  metrics:
+    - faithfulness
+    - context_recall
+    - context_precision
+
+  thresholds:
+    faithfulness: 0.70
+    context_recall: 0.70
+    context_precision: 0.70
+    answer_relevancy: 0.70
+
+  judge:
+    model: gpt-4o-mini
+    base_url: null
+    api_key_env: LLM_API_KEY
+    temperature: 0.0
+
+  embeddings:
+    model: text-embedding-3-small
+    base_url: null
+    api_key_env: LLM_API_KEY
+
+items:
+  - id: q1-optimized
+    question: 1기분 자동차세는 몇 월에 부과하나요?
+    ground_truth: |
+      1기분 자동차세는 6월에 부과한다.
+
+  - id: q1-user
+    question: 자동차세 1기분 고지서는 보통 언제 나오나요?
+    ground_truth: |
+      1기분 자동차세는 6월에 부과한다.
+
+  - id: q2-optimized
+    question: 주민세 개인분의 세액과 납부 기간은 어떻게 되나요?
+    ground_truth: |
+      주민세 개인분의 세액은 10,000원이며, 납부 기간은 8월 16일부터 31일까지이다.
+
+  - id: q2-user
+    question: 개인 주민세는 얼마고 언제까지 내면 돼요?
+    ground_truth: |
+      주민세 개인분의 세액은 10,000원이며, 납부 기간은 8월 16일부터 31일까지이다.
+
+  - id: q3-optimized
+    question: 재산세는 7월과 9월에 각각 어떤 항목을 부과하나요?
+    ground_truth: |
+      7월에는 주택분 50%와 건축물분을 부과하고, 9월에는 주택분 50%와 토지분을 부과한다.
+
+  - id: q3-user
+    question: 재산세 고지서가 7월이랑 9월에 나뉘어 나오던데, 각각 뭐에 대한 세금인가요?
+    ground_truth: |
+      7월에는 주택분 50%와 건축물분을 부과하고, 9월에는 주택분 50%와 토지분을 부과한다.
+
+  - id: q4-optimized
+    question: 정기분 등록면허세의 과세기준일은 언제인가요?
+    ground_truth: |
+      정기분 등록면허세의 과세기준일은 매년 1월 1일이다.
+
+  - id: q4-user
+    question: 면허가 있으면 어느 날짜를 기준으로 등록면허세가 부과되나요?
+    ground_truth: |
+      정기분 등록면허세의 과세기준일은 매년 1월 1일이다.
+
+  - id: q5-optimized
+    question: 건축물 취득세 안내문 발송 업무의 처리 대상과 추진주기는 무엇인가요?
+    ground_truth: |
+      처리 대상은 해당 월 건축 인허가·사용승인 건 중 취득세 미신고자이며, 추진주기는 매월이다.
+
+  - id: q5-user
+    question: 이번 달 준공 건축물 중 취득세를 안 낸 사람들에게 안내하려는데, 이 업무는 매달 하는 건가요?
+    ground_truth: |
+      처리 대상은 해당 월 건축 인허가·사용승인 건 중 취득세 미신고자이며, 추진주기는 매월이다.
+
+  - id: q6-optimized
+    question: 건축물 취득세 안내문 발송 전 납세자 주소를 확인하는 시스템 화면은 무엇인가요?
+    ground_truth: |
+      납세자 주소는 [5112] 납세자조회에서 확인한다.
+
+  - id: q6-user
+    question: 취득세 안내문 보내기 전에 주소가 맞는지 어디서 확인하면 되나요?
+    ground_truth: |
+      납세자 주소는 [5112] 납세자조회에서 확인한다.
+
+  - id: q7-optimized
+    question: 상속 대상 부동산의 실제 소유자를 최종 확인하는 시스템 화면은 무엇인가요?
+    ground_truth: |
+      실제 소유자는 [4525] 대법원등기부에서 최종 확인한다.
+
+  - id: q7-user
+    question: 상속 대상이라고 조회된 부동산이 실제로 돌아가신 분 소유였는지는 어디서 확인하죠?
+    ground_truth: |
+      실제 소유자는 [4525] 대법원등기부에서 최종 확인한다.
+
+  - id: q8-optimized
+    question: 재산세 토지분의 과세기준일과 납세의무자는 어떻게 되나요?
+    ground_truth: |
+      재산세 토지분의 과세기준일은 6월 1일이며, 납세의무자는 6월 1일 현재 토지 소유자, 즉 매수인이다.
+
+  - id: q8-user
+    question: 6월 1일 전에 토지를 팔았다면 그해 토지분 재산세는 매도인과 매수인 중 누가 내나요?
+    ground_truth: |
+      재산세 토지분의 과세기준일은 6월 1일이며, 납세의무자는 6월 1일 현재 토지 소유자, 즉 매수인이다.
+
+  - id: q9-optimized
+    question: 지방세 체납차량의 번호판 영치 대상 기준은 무엇인가요?
+    ground_truth: |
+      해당 차량의 자동차세가 2회 이상 체납된 경우 번호판을 영치한다. 징수촉탁 차량은 3회 이상이다.
+
+  - id: q9-user
+    question: 자동차세가 몇 번 밀리면 번호판을 떼어갈 수 있나요?
+    ground_truth: |
+      해당 차량의 자동차세가 2회 이상 체납된 경우 번호판을 영치한다. 징수촉탁 차량은 3회 이상이다.
+
+  - id: q10-optimized
+    question: 정기 법인 세무조사의 조사 대상 수와 조사 기간은 어떻게 되나요?
+    ground_truth: |
+      정기 법인 세무조사 대상은 40개 법인이며, 조사 기간은 매년 4월부터 11월까지이다.
+
+  - id: q10-user
+    question: 올해 법인 정기 세무조사는 몇 곳을 대상으로 언제 진행해요?
+    ground_truth: |
+      정기 법인 세무조사 대상은 40개 법인이며, 조사 기간은 매년 4월부터 11월까지이다.

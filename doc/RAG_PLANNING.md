@@ -415,8 +415,8 @@ deploy/k8s/rag.yaml
 ### 10.3 Golden Set
 
 `tests/eval/test_benchmark.py`에 fusion benchmark golden set 포함.  
-세무과 매뉴얼 DocuOps 질의 세트: [`tests/eval/DOCUOPS_TAX.md`](../tests/eval/DOCUOPS_TAX.md) · [`docuops_tax.yaml`](../tests/eval/docuops_tax.yaml).  
-RAGAS end-to-end 평가: [`tests/eval/ragas_template.yaml`](../tests/eval/ragas_template.yaml) · `rag-eval <yaml>`.  
+세무과 매뉴얼 DocuOps RAGAS 입력: [`tests/eval/ragas_input/docuops_tax.yaml`](../tests/eval/ragas_input/docuops_tax.yaml) (`group_id=dc`, 최적화·실사용 각 10문항).  
+RAGAS end-to-end 평가: [`tests/eval/ragas_template.yaml`](../tests/eval/ragas_template.yaml) · `rag-eval tests/eval/ragas_input`.  
 CI에서 Recall@5, MRR threshold gate.
 
 ---

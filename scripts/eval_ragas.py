@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -44,11 +45,30 @@ def load_dataset(path: Path) -> dict[str, Any]:
     return data
 
 
+def list_dataset_paths(path: Path) -> list[Path]:
+    if path.is_dir():
+        files = sorted({*path.glob("*.yaml"), *path.glob("*.yml")})
+        if not files:
+            raise ValueError(f"No YAML datasets in {path}")
+        return files
+    return [path]
+
+
+RESULTS_DIR = Path("results")
+
+
+def default_output_path(dataset: Path, when: datetime | None = None) -> Path:
+    stamp = (when or datetime.now(UTC)).strftime("%Y%m%dT%H%M%SZ")
+    label = dataset.stem if dataset.suffix else dataset.name
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-") or "run"
+    return RESULTS_DIR / f"ragas_{safe}_{stamp}.json"
+
+
 def resolve_defaults(data: dict[str, Any]) -> dict[str, Any]:
     defaults = data.get("defaults") or {}
     return {
-        "runner": defaults.get("runner", "direct"),
-        "api_url": defaults.get("api_url", "http://localhost:8000"),
+        "runner": defaults.get("runner", "api"),
+        "api_url": defaults.get("api_url", "http://localhost:7500"),
         "group_id": defaults.get("group_id"),
         "top_k": defaults.get("top_k", 5),
         "include_citations": defaults.get("include_citations", True),
@@ -111,7 +131,16 @@ async def query_direct(
     group_id: str | None,
     top_k: int,
 ) -> tuple[str, list[str], dict[str, float], str]:
-    from rag.generation.service import QueryService
+    try:
+        from rag.generation.service import QueryService
+    except ModuleNotFoundError as e:
+        raise SystemExit(
+            "direct runner imports QueryService in-process and needs the `rag` package "
+            "(pip install -e .). "
+            "With Docker API on the host, use:\n"
+            "  python scripts/eval_ragas.py tests/eval/ragas_input "
+            "--runner api --api-url http://localhost:7500 --dry-run"
+        ) from e
 
     service = QueryService()
     try:
@@ -293,9 +322,21 @@ def check_thresholds(scores: dict[str, float], thresholds: dict[str, float]) -> 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run RAGAS evaluation from YAML")
-    parser.add_argument("dataset", type=Path, help="Path to ragas YAML dataset")
-    parser.add_argument("--output", type=Path, help="Write JSON report to this path")
-    parser.add_argument("--runner", choices=["direct", "api"], help="Override defaults.runner")
+    parser.add_argument(
+        "dataset",
+        type=Path,
+        help="Path to a ragas YAML dataset or a directory of YAML files",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="JSON report path (default: results/ragas_<dataset>_<timestamp>.json)",
+    )
+    parser.add_argument(
+        "--runner",
+        choices=["direct", "api"],
+        help="Override defaults.runner (default: api)",
+    )
     parser.add_argument("--api-url", help="Override defaults.api_url")
     parser.add_argument(
         "--dry-run",
@@ -304,66 +345,73 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    data = load_dataset(args.dataset)
-    defaults = resolve_defaults(data)
-    runner = args.runner or defaults["runner"]
-    api_url = args.api_url or defaults["api_url"]
-    metric_names = list(defaults["metrics"])
+    paths = list_dataset_paths(args.dataset)
+    reports: list[dict[str, Any]] = []
+    any_fail = False
 
-    print(f"Dataset: {data.get('name', args.dataset.name)}")
-    print(f"Runner: {runner}")
-    print(f"Metrics: {', '.join(metric_names)}")
+    for dataset_path in paths:
+        data = load_dataset(dataset_path)
+        defaults = resolve_defaults(data)
+        runner = args.runner or defaults["runner"]
+        api_url = args.api_url or defaults["api_url"]
+        metric_names = list(defaults["metrics"])
 
-    rows, traces = asyncio.run(collect_samples(data, defaults, runner, api_url))
-    validate_rows_for_metrics(rows, metric_names)
+        print(f"Dataset: {data.get('name', dataset_path.name)} ({dataset_path})")
+        print(f"Runner: {runner}")
+        print(f"Metrics: {', '.join(metric_names)}")
 
-    report: dict[str, Any] = {
-        "name": data.get("name"),
-        "description": data.get("description"),
-        "dataset_path": str(args.dataset),
-        "run_at": datetime.now(UTC).isoformat(),
-        "runner": runner,
-        "metrics": metric_names,
-        "item_count": len(rows),
-        "traces": traces,
-    }
+        rows, traces = asyncio.run(collect_samples(data, defaults, runner, api_url))
+        validate_rows_for_metrics(rows, metric_names)
 
-    if args.dry_run:
-        report["dry_run"] = True
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-    else:
-        scores, ragas_details = run_ragas(
-            rows,
-            metric_names,
-            defaults["judge"],
-            defaults["embeddings"],
-        )
-        thresholds = defaults["thresholds"]
-        passed = check_thresholds(scores, thresholds) if thresholds else {}
+        report: dict[str, Any] = {
+            "name": data.get("name"),
+            "description": data.get("description"),
+            "dataset_path": str(dataset_path),
+            "run_at": datetime.now(UTC).isoformat(),
+            "runner": runner,
+            "metrics": metric_names,
+            "item_count": len(rows),
+            "traces": traces,
+        }
 
-        report["scores"] = scores
-        report["thresholds"] = thresholds
-        report["passed"] = passed
-        report["all_thresholds_met"] = all(passed.values()) if passed else None
-        report["ragas"] = ragas_details
-
-        print("\n--- RAGAS scores ---")
-        for name, value in scores.items():
-            mark = ""
-            if name in passed:
-                mark = " PASS" if passed[name] else " FAIL"
-            print(f"{name}: {value:.4f}{mark}")
-
-        if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(
-                json.dumps(report, ensure_ascii=False, indent=2),
-                encoding="utf-8",
+        if args.dry_run:
+            report["dry_run"] = True
+        else:
+            scores, ragas_details = run_ragas(
+                rows,
+                metric_names,
+                defaults["judge"],
+                defaults["embeddings"],
             )
-            print(f"\nWrote {args.output}")
+            thresholds = defaults["thresholds"]
+            passed = check_thresholds(scores, thresholds) if thresholds else {}
 
-        if passed and not all(passed.values()):
-            sys.exit(1)
+            report["scores"] = scores
+            report["thresholds"] = thresholds
+            report["passed"] = passed
+            report["all_thresholds_met"] = all(passed.values()) if passed else None
+            report["ragas"] = ragas_details
+
+            print("\n--- RAGAS scores ---")
+            for name, value in scores.items():
+                mark = ""
+                if name in passed:
+                    mark = " PASS" if passed[name] else " FAIL"
+                print(f"{name}: {value:.4f}{mark}")
+
+            if passed and not all(passed.values()):
+                any_fail = True
+
+        reports.append(report)
+
+    output = args.output or default_output_path(args.dataset)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    payload: Any = reports[0] if len(reports) == 1 else {"datasets": reports}
+    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\nWrote {output}")
+
+    if any_fail:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
