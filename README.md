@@ -146,7 +146,7 @@ uv run --no-project --with ragas --with openai --with httpx --with pyyaml \
   python scripts/eval_ragas.py tests/eval/ragas_input
 ```
 
-데이터셋만 추가할 때는 YAML을 [`tests/eval/ragas_input/`](tests/eval/ragas_input/)에 두면 폴더 실행에 포함됩니다. 템플릿: [`tests/eval/ragas_template.yaml`](tests/eval/ragas_template.yaml).
+데이터셋만 추가할 때는 YAML을 [`tests/eval/ragas_input/`](tests/eval/ragas_input/)에 두면 폴더 실행에 포함됩니다. `use: false`면 폴더 실행에서 건너뜁니다 (생략 시 `true`). 템플릿: [`tests/eval/ragas_template.yaml`](tests/eval/ragas_template.yaml).
 
 ```bash
 cp tests/eval/ragas_template.yaml tests/eval/ragas_input/my_eval.yaml

@@ -37,6 +37,14 @@ METRIC_SPECS: dict[str, dict[str, Any]] = {
 }
 
 
+def is_dataset_enabled(data: dict[str, Any]) -> bool:
+    """YAML top-level `use: false` skips the dataset. Missing `use` means enabled."""
+    flag = data.get("use", True)
+    if isinstance(flag, str):
+        return flag.strip().lower() not in {"false", "0", "no", "off"}
+    return bool(flag)
+
+
 def load_dataset(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
@@ -503,6 +511,9 @@ def main() -> None:
 
     for dataset_path in paths:
         data = load_dataset(dataset_path)
+        if not is_dataset_enabled(data):
+            print(f"Skip: {dataset_path} (use: false)")
+            continue
         defaults = resolve_defaults(data)
         runner = args.runner or defaults["runner"]
         api_url = args.api_url or defaults["api_url"]
@@ -559,6 +570,12 @@ def main() -> None:
                 any_fail = True
 
         reports.append(report)
+
+    if not reports:
+        raise SystemExit(
+            "No enabled datasets (all YAML have use: false). "
+            "Set use: true on at least one file."
+        )
 
     output = args.output or default_output_path(args.dataset)
     output.parent.mkdir(parents=True, exist_ok=True)

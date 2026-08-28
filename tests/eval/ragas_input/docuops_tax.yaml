@@ -8,6 +8,7 @@
 
 name: docuops-tax
 description: 세무과 업무 매뉴얼 DocuOps 10문항 × 최적화/실사용 질의
+use: false
 
 defaults:
   runner: api

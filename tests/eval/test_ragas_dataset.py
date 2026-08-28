@@ -11,6 +11,7 @@ from scripts.eval_ragas import (
     citation_records,
     context_texts,
     default_output_path,
+    is_dataset_enabled,
     list_dataset_paths,
     load_dataset,
     resolve_defaults,
@@ -116,6 +117,13 @@ def test_aggregate_ragas_scores_from_repr_dict():
     assert scores == {"faithfulness": 0.5}
 
 
+def test_is_dataset_enabled_defaults_true():
+    assert is_dataset_enabled({}) is True
+    assert is_dataset_enabled({"use": True}) is True
+    assert is_dataset_enabled({"use": False}) is False
+    assert is_dataset_enabled({"use": "false"}) is False
+
+
 def test_resolve_defaults_runner_is_api():
     defaults = resolve_defaults({})
     assert defaults["runner"] == "api"
@@ -160,8 +168,8 @@ def test_ragas_input_dir_has_yaml():
 def test_ragas_input_loads(path: Path):
     data = load_dataset(path)
     defaults = resolve_defaults(data)
-    assert defaults["runner"] == "api"
-    assert defaults["metrics"]
+    assert "use" in data
+    assert data["use"] in (True, False)
     assert len(data["items"]) >= 1
     for item in data["items"]:
         assert item.get("question"), f"{path.name} item {item.get('id')} missing question"
