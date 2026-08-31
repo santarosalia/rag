@@ -27,6 +27,9 @@ class IngestionPipeline:
         self.chunker = MarkdownChunker(
             max_tokens=chunk_cfg.get("max_tokens", 768),
             overlap_tokens=chunk_cfg.get("overlap_tokens", 128),
+            min_chunk_tokens=chunk_cfg.get("min_chunk_tokens", 64),
+            small_table_max_tokens=chunk_cfg.get("small_table_max_tokens", 128),
+            small_table_max_rows=chunk_cfg.get("small_table_max_rows", 8),
         )
         self.batch_size = ingest_cfg.get("bulk_batch_size", 100)
         self.storage = ObjectStorage()

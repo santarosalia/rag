@@ -1,6 +1,9 @@
 chunking:
   max_tokens: 768
   overlap_tokens: 128
+  min_chunk_tokens: 64
+  small_table_max_tokens: 128
+  small_table_max_rows: 8
 
 retrieval:
   dense_k: 50

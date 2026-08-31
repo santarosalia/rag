@@ -110,7 +110,7 @@ multipart:
 
 ```
 Markdown
-  → MarkdownChunker (MarkdownElementNodeParser)
+  → MarkdownChunker (Element 경계 + ChunkBag)
   → BGE-M3 embed + Kiwi morph
   → chunks INSERT (content, group_id, …)
   → commit
@@ -177,7 +177,7 @@ MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용
 
 ### 5.1 Chunking (Markdown)
 
-LlamaIndex `MarkdownChunker` (`MarkdownElementNodeParser`: 표·코드 atomic, LLM 요약 없음). 규칙: [`CHUNKING.md`](CHUNKING.md).
+LlamaIndex `extract_elements`로 경계를 잡고, ChunkBag(768·overlap·min_chunk_tokens)으로 조립한다. 표·코드 atomic, 메타/푸터 병합. 규칙: [`CHUNKING.md`](CHUNKING.md).
 
 ### 5.2 운영
 

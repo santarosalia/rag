@@ -6,9 +6,9 @@
 > **작성일:** 2026-08-27  
 > **상태:** 구현 대상
 
-관련: [`CHUNKING.md`](CHUNKING.md) (현재 구현: LlamaIndex `MarkdownChunker`) · [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md)
+관련: [`CHUNKING.md`](CHUNKING.md) (현재: Element 경계 + ChunkBag) · [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-현재 청커는 헤딩 섹션 → `SentenceSplitter`이며 **표·펜스를 atomic으로 지키지 않는다.** 검색·생성 단위도 같다. 이 문서는 그 다음 단계(parent-child + 거대 표 행 그룹)다. 구현 후 `CHUNKING.md`가 실행 규칙의 소스가 된다.
+현재 청커는 표·코드를 atomic으로 두되 **예산 안이면 prose와 같은 가방**에 넣고, 메타 표·푸터는 본문에 붙인다. 검색·생성 단위는 아직 같다. 이 문서는 그 다음 단계(parent-child + 거대 표 행 그룹)다.
 
 ---
 
@@ -47,7 +47,7 @@
 
 DocuOps 0점(키워드 표기, 질의에 없는 `매수인`)은 이 기획의 성공 기준이 아니다. 표·섹션 문맥 문항과 재적재 후 토큰 분포로 본다.
 
-현재 `MarkdownChunker`(헤딩 → SentenceSplitter) 위에 **부모를 얹고, 거대 표만 조건부 행 그룹**한다. 표·펜스 atomic은 이 단계에서 다시 도입한다.
+현재 `MarkdownChunker`(Element + ChunkBag) 위에 **부모를 얹고, 거대 표만 조건부 행 그룹**한다.
 
 ---
 
