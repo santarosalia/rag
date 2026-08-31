@@ -49,3 +49,23 @@ def test_chunk_index_is_contiguous():
     text = "# A\n\n" + ("word " * 80) + "\n\n# B\n\n" + ("tail " * 80)
     chunks = chunker.chunk(text)
     assert [c.chunk_index for c in chunks] == list(range(len(chunks)))
+
+
+def test_chunker_keeps_pipe_table_atomic():
+    chunker = MarkdownChunker(max_tokens=30, overlap_tokens=0)
+    table = "| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |"
+    text = f"# T\n\nintro words here\n\n{table}\n\n## Next\n\ntail"
+    chunks = chunker.chunk(text)
+    table_chunks = [c for c in chunks if "| a | b |" in c.content]
+    assert len(table_chunks) == 1
+    assert "| 3 | 4 |" in table_chunks[0].content
+    assert any("Next" in c.content or "tail" in c.content for c in chunks)
+
+
+def test_chunker_keeps_fenced_code_atomic():
+    chunker = MarkdownChunker(max_tokens=20, overlap_tokens=0)
+    fence = "```python\nprint(1)\n\nprint(2)\n```"
+    chunks = chunker.chunk(f"# T\n\n{fence}\n\nafter")
+    code_chunks = [c for c in chunks if "print(1)" in c.content]
+    assert len(code_chunks) == 1
+    assert "print(2)" in code_chunks[0].content

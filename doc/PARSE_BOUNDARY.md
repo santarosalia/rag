@@ -110,7 +110,7 @@ multipart:
 
 ```
 Markdown
-  → MarkdownChunker (LlamaIndex: 헤딩 섹션 → SentenceSplitter)
+  → MarkdownChunker (MarkdownElementNodeParser)
   → BGE-M3 embed + Kiwi morph
   → chunks INSERT (content, group_id, …)
   → commit
@@ -177,7 +177,7 @@ MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용
 
 ### 5.1 Chunking (Markdown)
 
-LlamaIndex `MarkdownNodeParser` + `SentenceSplitter`. 규칙 전부: [`CHUNKING.md`](CHUNKING.md).
+LlamaIndex `MarkdownChunker` (`MarkdownElementNodeParser`: 표·코드 atomic, LLM 요약 없음). 규칙: [`CHUNKING.md`](CHUNKING.md).
 
 ### 5.2 운영
 
