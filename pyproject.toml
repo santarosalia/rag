@@ -35,6 +35,7 @@ dependencies = [
     "kiwipiepy>=0.19.0",
     "pgvector>=0.3.0",
     "markitdown[docx,pdf,pptx]>=0.1.0",
+    "llama-index-core>=0.12.0",
 ]
 
 [project.optional-dependencies]

@@ -1,7 +1,6 @@
 chunking:
   max_tokens: 768
   overlap_tokens: 128
-  min_chunk_tokens: 64
 
 retrieval:
   dense_k: 50

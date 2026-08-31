@@ -6,9 +6,9 @@
 > **작성일:** 2026-08-27  
 > **상태:** 구현 대상
 
-관련: [`CHUNKING.md`](CHUNKING.md) (현재 구현) · [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md)
+관련: [`CHUNKING.md`](CHUNKING.md) (현재 구현: LlamaIndex `MarkdownChunker`) · [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-현재 청커는 헤딩·표·펜스 경계를 지키되 **한 행이 검색·생성에 같이 쓰인다.** 이 문서는 그 다음 단계다. 구현 후 `CHUNKING.md`가 실행 규칙의 소스가 된다.
+현재 청커는 헤딩 섹션 → `SentenceSplitter`이며 **표·펜스를 atomic으로 지키지 않는다.** 검색·생성 단위도 같다. 이 문서는 그 다음 단계(parent-child + 거대 표 행 그룹)다. 구현 후 `CHUNKING.md`가 실행 규칙의 소스가 된다.
 
 ---
 
@@ -47,7 +47,7 @@
 
 DocuOps 0점(키워드 표기, 질의에 없는 `매수인`)은 이 기획의 성공 기준이 아니다. 표·섹션 문맥 문항과 재적재 후 토큰 분포로 본다.
 
-현재 규칙(헤딩 섹션 → 블록 → 768 가방, 표·펜스 atomic)은 유지하고 **부모를 그 위에 얹고, atomic 표만 조건부 분할**한다.
+현재 `MarkdownChunker`(헤딩 → SentenceSplitter) 위에 **부모를 얹고, 거대 표만 조건부 행 그룹**한다. 표·펜스 atomic은 이 단계에서 다시 도입한다.
 
 ---
 
@@ -162,16 +162,16 @@ chunks
 
 ## 6. 청커 변경
 
-`SemanticChunker.chunk()` 골격은 유지한다. 섹션 루프를 닫는 방식과 표 분기만 바뀐다.
+`MarkdownChunker.chunk()`를 parent-child 출력으로 확장한다. LlamaIndex 헤딩 분할은 유지하고, 표 분기·부모 윈도우를 얹는다.
 
-1. `_split_heading_sections` 후 **섹션마다** 가방을 flush한다. 섹션을 넘는 overlap·leftover append는 하지 않는다.
-2. 본문 블록: 기존 768 가방 + 섹션 내부 overlap.
-3. 표 블록: §3. 큰 표면 본문 가방을 먼저 flush하고 표 child를 이어 붙인다 (지금 atomic flush와 같음).
+1. 헤딩 섹션마다 child를 닫는다. 섹션을 넘는 leftover append는 하지 않는다.
+2. 본문: `max_tokens` 가방 + 섹션 내부 overlap.
+3. 표 블록: §3. 큰 표면 본문 가방을 먼저 flush하고 표 child를 이어 붙인다.
 4. 펜스: atomic, 섹션 부모.
 5. 섹션(또는 표 윈도우)이 `parent_max_tokens`를 넘으면 연속 child로 부모를 나눈다.
-6. leftover `< min_chunk_tokens`이고 같은 섹션 이전 child가 있으면 append. **다른 섹션에는 붙이지 않음.**
+6. leftover `< min_chunk_tokens`(이 단계에서 재도입)이고 같은 섹션 이전 child가 있으면 append. **다른 섹션에는 붙이지 않음.**
 
-헤딩 패턴, 펜스/HTML 표 안의 `#` 무시, 빈 입력 → 청크 0개는 [`CHUNKING.md`](CHUNKING.md)와 같다.
+빈 입력 → 청크 0개는 [`CHUNKING.md`](CHUNKING.md)와 같다.
 
 ---
 
@@ -202,7 +202,7 @@ retrieve-only(`POST /v1/retrieve`)도 같은 expand를 탄다. snippet은 child�
 |----|------|------|
 | `chunking.max_tokens` | 768 | 본문 child 상한 (유지) |
 | `chunking.overlap_tokens` | 128 | 본문·섹션 내부만 (유지) |
-| `chunking.min_chunk_tokens` | 64 | leftover 결합 (유지) |
+| `chunking.min_chunk_tokens` | 64 | leftover 결합 (**이 단계에서 재도입**) |
 | `chunking.parent_max_tokens` | 2048 | 부모 윈도우 상한 |
 | `chunking.table_child_max_tokens` | 256 | 큰 표 행 그룹 child 상한 |
 | `retrieval.expand_to_parent` | true | false면 생성도 child `content` (A/B용) |

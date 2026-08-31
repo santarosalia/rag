@@ -19,7 +19,7 @@ flowchart TB
   subgraph ingest [Ingestion]
     Upload[Document Upload]
     MD[MarkItDown / parsed Markdown]
-    Chunker[Semantic Chunker]
+    Chunker[MarkdownChunker]
     EmbedWorker[Embedding BGE-M3]
     MorphWorker[Kiwi Morphology]
     CeleryWorker[Celery Worker]
@@ -127,7 +127,7 @@ src/rag/
 │   └── service.py    # CRUD, 삭제 정책
 ├── ingestion/
 │   ├── markdown.py   # MarkItDown / 경로 B 패스스루
-│   ├── chunker.py    # SemanticChunker (헤딩·표)
+│   ├── chunker.py    # MarkdownChunker (LlamaIndex)
 │   └── pipeline.py   # IngestionPipeline
 ├── retrieval/
 │   ├── embeddings.py # BGE-M3, reranker, cache

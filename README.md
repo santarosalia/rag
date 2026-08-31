@@ -194,7 +194,7 @@ Postgres는 `pgvector/pgvector:pg16` 이미지 사용. OpenSearch 클러스터 �
 src/rag/
 ├── api/           # FastAPI (documents, groups, retrieve/query)
 ├── groups/        # 평면 그룹 CRUD, 검색 필터
-├── ingestion/     # markdown (MarkItDown), chunker
+├── ingestion/     # markdown (MarkItDown), MarkdownChunker (LlamaIndex)
 ├── indexing/      # pgvector_backend, Kiwi morphology
 ├── retrieval/     # RRF, rerank pipeline
 ├── generation/    # LLM

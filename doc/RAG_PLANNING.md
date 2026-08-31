@@ -111,7 +111,7 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 
 ```
 Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패스스루)
-       → Semantic Chunker → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
+       → MarkdownChunker → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
        → PostgreSQL documents 상태 갱신
 ```
 
@@ -126,8 +126,8 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 
 ### 3.3 Chunking 전략
 
-Markdown ATX 헤딩(`#`–`######`)·파이프 표·코드 펜스·HTML 표 경계를 우선하는 Semantic Chunker (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
-`min_chunk_tokens` 미만 본문은 버리지 않고 이전 청크에 붙인다. 상세: [`CHUNKING.md`](CHUNKING.md).  
+LlamaIndex `MarkdownChunker`: ATX 헤딩 섹션 → `SentenceSplitter` (`max_tokens` 768, `overlap_tokens` 128).  
+표·펜스 atomic·leftover 병합은 하지 않는다. 상세: [`CHUNKING.md`](CHUNKING.md).  
 다음: 검색=child / 생성=parent, 거대 표만 행 그룹 — [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md).
 
 ### 3.4 메타데이터 스키마
@@ -442,5 +442,5 @@ CI에서 Recall@5, MRR threshold gate.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
 - [adr/](adr/) — Architecture Decision Records
 - [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md) — 파싱 경계, 이중 진입점, 적재 계약
-- [CHUNKING.md](CHUNKING.md) — Semantic Chunker 분할 규칙 (현재 구현)
+- [CHUNKING.md](CHUNKING.md) — MarkdownChunker (LlamaIndex) 분할 규칙
 - [PARENT_CHILD_PLANNING.md](PARENT_CHILD_PLANNING.md) — parent-child · 표 행 단위 (구현 대상)

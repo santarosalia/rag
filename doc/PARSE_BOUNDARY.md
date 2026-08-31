@@ -20,7 +20,7 @@
                                                          ▼
                                               Markdown
                                                          ▼
-                                    Semantic Chunker → BGE-M3 → Kiwi
+                                    MarkdownChunker → BGE-M3 → Kiwi
                                                          ▼
                                     PostgreSQL documents + chunks
                                                          ▼
@@ -110,7 +110,7 @@ multipart:
 
 ```
 Markdown
-  → Semantic Chunker (ATX 헤딩·atomic 표/펜스 경계 우선)
+  → MarkdownChunker (LlamaIndex: 헤딩 섹션 → SentenceSplitter)
   → BGE-M3 embed + Kiwi morph
   → chunks INSERT (content, group_id, …)
   → commit
@@ -166,7 +166,7 @@ WHERE c.embedding IS NOT NULL
 | 이점 | 설명 |
 |------|------|
 | 단일 적재 입력 | PDF/DOCX/PPTX/HTML → MD 한 종류만 chunker가 본다 |
-| LLM/RAG 친화 | 제목·목록·표가 Semantic Chunker 경계에 유리 |
+| LLM/RAG 친화 | 제목·목록·표가 Markdown 헤딩 청킹에 유리 |
 | 포맷 확장 | extras는 경로 A 또는 **외부 파서**가 흡수. 이 저장소 chunker는 MD만 |
 
 MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용**이다.
@@ -177,7 +177,7 @@ MarkItDown은 인쇄용 변환기가 아니라 **텍스트 분석·LLM ingest용
 
 ### 5.1 Chunking (Markdown)
 
-헤딩(ATX `#`–`######`)·파이프 표·코드 펜스·HTML 표 경계 우선. 규칙 전부: [`CHUNKING.md`](CHUNKING.md).
+LlamaIndex `MarkdownNodeParser` + `SentenceSplitter`. 규칙 전부: [`CHUNKING.md`](CHUNKING.md).
 
 ### 5.2 운영
 

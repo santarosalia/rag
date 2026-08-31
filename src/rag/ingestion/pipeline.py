@@ -8,7 +8,7 @@ from rag.config import get_settings
 from rag.db.models import Chunk, Document, DocumentStatus, Group, IngestJob, JobStatus
 from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
-from rag.ingestion.chunker import SemanticChunker
+from rag.ingestion.chunker import MarkdownChunker
 from rag.ingestion.markdown import to_markdown
 from rag.observability.logging import get_logger
 from rag.observability.metrics import INGEST_COUNTER
@@ -24,10 +24,9 @@ class IngestionPipeline:
         chunk_cfg = config.get("chunking", {})
         ingest_cfg = config.get("ingestion", {})
 
-        self.chunker = SemanticChunker(
+        self.chunker = MarkdownChunker(
             max_tokens=chunk_cfg.get("max_tokens", 768),
             overlap_tokens=chunk_cfg.get("overlap_tokens", 128),
-            min_chunk_tokens=chunk_cfg.get("min_chunk_tokens", 64),
         )
         self.batch_size = ingest_cfg.get("bulk_batch_size", 100)
         self.storage = ObjectStorage()
