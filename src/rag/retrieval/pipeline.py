@@ -45,6 +45,7 @@ class RetrievalPipeline:
         sparse_k = self.config.get("sparse_k", 50)
         rerank_top_n = top_k or self.config.get("rerank_top_n", 5)
         rerank_input_k = self.config.get("rerank_input_k", 50)
+        expand_to_parent = bool(self.config.get("expand_to_parent", True))
 
         t0 = time.perf_counter()
         embedding = await self._get_query_embedding(query)
@@ -94,7 +95,10 @@ class RetrievalPipeline:
         else:
             hits = hits[:rerank_top_n]
 
-        citations = self._to_citations(hits)
+        if expand_to_parent:
+            hits = self._expand_to_parent(hits)
+
+        citations = self._to_citations(hits, expand_to_parent=expand_to_parent)
         latency["total_ms"] = sum(latency.values())
         return citations, latency
 
@@ -108,12 +112,48 @@ class RetrievalPipeline:
         return embedding
 
     @staticmethod
-    def _to_citations(hits: list[dict[str, Any]]) -> list[Citation]:
+    def _expand_to_parent(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep one hit per parent (highest score), preserving first-seen order."""
+        best_by_key: dict[str, dict[str, Any]] = {}
+        order: list[str] = []
+
+        for hit in hits:
+            parent_id = hit.get("parent_chunk_id")
+            key = parent_id or str(hit.get("chunk_id", ""))
+            score = float(
+                hit.get("rerank_score", hit.get("rrf_score", hit.get("score", 0.0)))
+            )
+            existing = best_by_key.get(key)
+            if existing is None:
+                best_by_key[key] = hit
+                order.append(key)
+                continue
+            existing_score = float(
+                existing.get(
+                    "rerank_score",
+                    existing.get("rrf_score", existing.get("score", 0.0)),
+                )
+            )
+            if score > existing_score:
+                best_by_key[key] = hit
+
+        return [best_by_key[key] for key in order]
+
+    @staticmethod
+    def _to_citations(
+        hits: list[dict[str, Any]],
+        *,
+        expand_to_parent: bool,
+    ) -> list[Citation]:
         citations = []
         for rank, hit in enumerate(hits, start=1):
             score = hit.get("rerank_score", hit.get("rrf_score", hit.get("score", 0.0)))
-            content = hit.get("content", "") or ""
-            snippet = content[:300] + ("..." if len(content) > 300 else "")
+            child_content = hit.get("content", "") or ""
+            if expand_to_parent:
+                body = hit.get("parent_content") or child_content
+            else:
+                body = child_content
+            snippet = child_content[:300] + ("..." if len(child_content) > 300 else "")
             citations.append(
                 Citation(
                     chunk_id=str(hit.get("chunk_id", "")),
@@ -123,7 +163,7 @@ class RetrievalPipeline:
                     score=float(score),
                     snippet=snippet,
                     rank=rank,
-                    content=content,
+                    content=body,
                 )
             )
         return citations

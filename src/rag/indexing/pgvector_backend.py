@@ -153,12 +153,16 @@ class PgVectorBackend:
                 c.id::text AS chunk_id,
                 c.doc_id::text AS doc_id,
                 c.content,
+                c.parent_chunk_id::text AS parent_chunk_id,
+                COALESCE(p.content, c.content) AS parent_content,
                 d.filename,
                 c.page,
                 1 - (c.embedding <=> CAST(:embedding AS vector)) AS score
             FROM chunks c
             JOIN documents d ON c.doc_id = d.id
+            LEFT JOIN chunks p ON p.id = c.parent_chunk_id
             WHERE c.embedding IS NOT NULL
+              AND c.role = 'child'
               AND d.status = 'completed'
               {group_clause}
             ORDER BY c.embedding <=> CAST(:embedding AS vector)
@@ -189,12 +193,16 @@ class PgVectorBackend:
                 c.id::text AS chunk_id,
                 c.doc_id::text AS doc_id,
                 c.content,
+                c.parent_chunk_id::text AS parent_chunk_id,
+                COALESCE(p.content, c.content) AS parent_content,
                 d.filename,
                 c.page,
                 ts_rank(c.tsv, plainto_tsquery('simple', :morph_query)) AS score
             FROM chunks c
             JOIN documents d ON c.doc_id = d.id
+            LEFT JOIN chunks p ON p.id = c.parent_chunk_id
             WHERE c.tsv IS NOT NULL
+              AND c.role = 'child'
               AND c.tsv @@ plainto_tsquery('simple', :morph_query)
               AND d.status = 'completed'
               {group_clause}
@@ -212,11 +220,14 @@ class PgVectorBackend:
     def _rows_to_hits(rows: list[Any]) -> list[dict[str, Any]]:
         hits = []
         for rank, row in enumerate(rows, start=1):
+            child_content = row["content"] or ""
             hits.append(
                 {
                     "chunk_id": row["chunk_id"],
                     "doc_id": row["doc_id"],
-                    "content": row["content"] or "",
+                    "content": child_content,
+                    "parent_chunk_id": row["parent_chunk_id"],
+                    "parent_content": row["parent_content"] or child_content,
                     "filename": row["filename"] or "",
                     "page": row["page"],
                     "score": float(row["score"] or 0.0),

@@ -1,9 +1,7 @@
 chunking:
   max_tokens: 768
+  parent_max_tokens: 2048
   overlap_tokens: 128
-  min_chunk_tokens: 64
-  small_table_max_tokens: 128
-  small_table_max_rows: 8
 
 retrieval:
   dense_k: 50
@@ -12,6 +10,7 @@ retrieval:
   rerank_top_n: 5
   rerank_input_k: 50
   context_max_tokens: 4096
+  expand_to_parent: true
 
 models:
   embedding: "BAAI/bge-m3"

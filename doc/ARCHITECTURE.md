@@ -127,7 +127,7 @@ src/rag/
 │   └── service.py    # CRUD, 삭제 정책
 ├── ingestion/
 │   ├── markdown.py   # MarkItDown / 경로 B 패스스루
-│   ├── chunker.py    # Element 경계 + ChunkBag (메타/푸터 병합)
+│   ├── chunker.py    # HierarchicalNodeParser 2단 (parent/child)
 │   └── pipeline.py   # IngestionPipeline
 ├── retrieval/
 │   ├── embeddings.py # BGE-M3, reranker, cache

@@ -2,17 +2,31 @@
 
 > **프로젝트명:** Hybrid RAG Platform  
 > **대상:** 검색 단위(child)와 생성 단위(parent) 분리 + 거대 표만 행 그룹 child  
-> **버전:** 0.4.0  
+> **버전:** 0.5.0  
 > **작성일:** 2026-08-27  
-> **상태:** 구현 대상
+> **상태:** 부분 구현 (Hierarchical 토큰 피라미드)
 
-관련: [`CHUNKING.md`](CHUNKING.md) (현재: Element 경계 + ChunkBag) · [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md)
+관련: [`CHUNKING.md`](CHUNKING.md) (현재: HierarchicalNodeParser 2단) · [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-현재 청커는 표·코드를 atomic으로 두되 **예산 안이면 prose와 같은 가방**에 넣고, 메타 표·푸터는 본문에 붙인다. 검색·생성 단위는 아직 같다. 이 문서는 그 다음 단계(parent-child + 거대 표 행 그룹)다.
+### 구현 현황 (2026-08-31)
+
+**현재 코드는 헤딩 섹션 parent가 아니라 LlamaIndex `HierarchicalNodeParser` 토큰 피라미드**다.
+
+| 항목 | 구현됨 | 미구현(이 기획의 원래 안) |
+|------|--------|---------------------------|
+| `role` / `parent_chunk_id` / `kind` | O | |
+| child-only embed + `role='child'` 검색 | O | |
+| 항상 `expand_to_parent` (Citation content=parent, snippet=child) | O | |
+| parent = `parent_max_tokens` 창, child = `max_tokens` leaf | O | |
+| 헤딩 섹션 = parent | | O |
+| 큰 표 행 그룹 child + 윈도우 parent | | O (표는 토큰 경계로 잘릴 수 있음) |
+| AutoMergingRetriever | | 사용 안 함 (항상 expand) |
+
+상세 동작은 [`CHUNKING.md`](CHUNKING.md). 아래 §0 이후는 **원래 헤딩/표 기획**을 보관한다. 표 행 그룹은 후속 과제.
 
 ---
 
-## 0. 결론
+## 0. 결론 (원래 기획: 헤딩/표)
 
 **2단만 둔다.** 문서–섹션–표–행 같은 3단 FK는 만들지 않는다.
 
@@ -47,7 +61,7 @@
 
 DocuOps 0점(키워드 표기, 질의에 없는 `매수인`)은 이 기획의 성공 기준이 아니다. 표·섹션 문맥 문항과 재적재 후 토큰 분포로 본다.
 
-현재 `MarkdownChunker`(Element + ChunkBag) 위에 **부모를 얹고, 거대 표만 조건부 행 그룹**한다.
+원래는 `MarkdownChunker`(Element + ChunkBag) 위에 **헤딩 부모를 얹고, 거대 표만 조건부 행 그룹**하려 했다. **현재 구현은 Hierarchical 토큰 피라미드로 대체**했다.
 
 ---
 

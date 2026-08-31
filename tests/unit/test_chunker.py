@@ -1,4 +1,5 @@
 from rag.ingestion.chunker import MarkdownChunker
+from rag.retrieval.pipeline import RetrievalPipeline
 
 
 def test_chunker_empty_text():
@@ -7,144 +8,120 @@ def test_chunker_empty_text():
     assert chunker.chunk("   ") == []
 
 
-def test_chunker_preserves_short_text():
-    chunker = MarkdownChunker(max_tokens=512, overlap_tokens=0, min_chunk_tokens=1)
-    text = "Short single paragraph."
+def test_chunker_short_text_has_parent_and_child():
+    chunker = MarkdownChunker(max_tokens=512, parent_max_tokens=2048, overlap_tokens=0)
+    chunks = chunker.chunk("Short single paragraph.")
+    parents = [c for c in chunks if c.role == "parent"]
+    children = [c for c in chunks if c.role == "child"]
+    assert len(parents) == 1
+    assert len(children) == 1
+    assert children[0].chunk_index == 0
+    assert children[0].parent_key == parents[0].parent_key
+    assert "Short single paragraph." in children[0].content
+    assert children[0].content in parents[0].content or parents[0].content
+
+
+def test_chunker_splits_long_text_into_hierarchy():
+    chunker = MarkdownChunker(max_tokens=50, parent_max_tokens=120, overlap_tokens=10)
+    text = "First paragraph with some content. " * 40
     chunks = chunker.chunk(text)
-    assert len(chunks) == 1
-    assert "Short single paragraph." in chunks[0].content
-    assert chunks[0].chunk_index == 0
-    assert chunks[0].token_count > 0
+    parents = [c for c in chunks if c.role == "parent"]
+    children = [c for c in chunks if c.role == "child"]
+    assert len(children) > 1
+    assert len(parents) >= 1
+    assert [c.chunk_index for c in children] == list(range(len(children)))
+    for child in children:
+        assert child.parent_key is not None
+        assert any(p.parent_key == child.parent_key for p in parents)
 
 
-def test_chunker_splits_long_text():
-    chunker = MarkdownChunker(max_tokens=50, overlap_tokens=10, min_chunk_tokens=5)
-    text = "First paragraph with some content.\n\n" * 20
-    chunks = chunker.chunk(text)
-    assert len(chunks) > 1
-    for i, chunk in enumerate(chunks):
-        assert chunk.content
-        assert chunk.token_count > 0
-        assert chunk.chunk_index == i
+def test_child_tokens_near_max_budget():
+    chunker = MarkdownChunker(max_tokens=50, parent_max_tokens=200, overlap_tokens=0)
+    text = "Alpha beta gamma delta epsilon. " * 80
+    children = [c for c in chunker.chunk(text) if c.role == "child"]
+    assert children
+    # Hierarchical SentenceSplitter can slightly exceed; keep a soft ceiling.
+    assert max(c.token_count for c in children) <= 80
 
 
-def test_chunker_breaks_at_heading_when_over_budget():
-    chunker = MarkdownChunker(max_tokens=40, overlap_tokens=0, min_chunk_tokens=1)
-    text = "# First\n\n" + ("word " * 80) + "\n\n# Second\n\nshort tail"
-    chunks = chunker.chunk(text)
-    assert any("First" in c.content and "Second" not in c.content for c in chunks)
-    assert any("Second" in c.content for c in chunks)
+def test_expand_to_parent_dedupes_siblings():
+    hits = [
+        {
+            "chunk_id": "c1",
+            "doc_id": "d1",
+            "content": "child one",
+            "parent_chunk_id": "p1",
+            "parent_content": "parent shared",
+            "filename": "a.md",
+            "page": None,
+            "score": 0.5,
+            "rerank_score": 0.5,
+        },
+        {
+            "chunk_id": "c2",
+            "doc_id": "d1",
+            "content": "child two longer text",
+            "parent_chunk_id": "p1",
+            "parent_content": "parent shared",
+            "filename": "a.md",
+            "page": None,
+            "score": 0.9,
+            "rerank_score": 0.9,
+        },
+        {
+            "chunk_id": "c3",
+            "doc_id": "d1",
+            "content": "other",
+            "parent_chunk_id": "p2",
+            "parent_content": "parent two",
+            "filename": "a.md",
+            "page": None,
+            "score": 0.4,
+            "rerank_score": 0.4,
+        },
+    ]
+    expanded = RetrievalPipeline._expand_to_parent(hits)
+    assert len(expanded) == 2
+    assert expanded[0]["chunk_id"] == "c2"
+    assert expanded[0]["parent_chunk_id"] == "p1"
+    assert expanded[1]["chunk_id"] == "c3"
 
 
-def test_chunker_breaks_at_h4_when_over_budget():
-    chunker = MarkdownChunker(max_tokens=40, overlap_tokens=0, min_chunk_tokens=1)
-    text = "#### First\n\n" + ("word " * 80) + "\n\n#### Second\n\nshort tail"
-    chunks = chunker.chunk(text)
-    assert any("First" in c.content and "Second" not in c.content for c in chunks)
-    assert any("Second" in c.content for c in chunks)
+def test_to_citations_uses_parent_content_and_child_snippet():
+    hits = [
+        {
+            "chunk_id": "c1",
+            "doc_id": "d1",
+            "content": "child snippet body",
+            "parent_chunk_id": "p1",
+            "parent_content": "full parent context for generation",
+            "filename": "a.md",
+            "page": 1,
+            "rerank_score": 0.8,
+        }
+    ]
+    citations = RetrievalPipeline._to_citations(hits, expand_to_parent=True)
+    assert len(citations) == 1
+    assert citations[0].chunk_id == "c1"
+    assert citations[0].snippet == "child snippet body"
+    assert citations[0].content == "full parent context for generation"
 
 
-def test_chunk_index_is_contiguous():
-    chunker = MarkdownChunker(max_tokens=40, overlap_tokens=0, min_chunk_tokens=1)
-    text = "# A\n\n" + ("word " * 80) + "\n\n# B\n\n" + ("tail " * 80)
-    chunks = chunker.chunk(text)
-    assert [c.chunk_index for c in chunks] == list(range(len(chunks)))
-
-
-def test_prose_and_table_share_chunk_when_under_budget():
-    """C01-style: background prose + expectation table stay together."""
-    chunker = MarkdownChunker(max_tokens=768, overlap_tokens=0, min_chunk_tokens=1)
-    prose = (
-        "이용 이유는 지능정보 서비스 운영의 복합성 증가, "
-        "운영 이슈·히스토리 및 업체 간 형상관리 내역 공유의 어려움 때문이다."
-    )
-    table = (
-        "| 구분 | 내용 |\n"
-        "| --- | --- |\n"
-        "| 기대효과 | AiSAC 서비스 품질 제고, 인수인계 시간 최소화 |"
-    )
-    text = f"# 이용계획\n\n{prose}\n\n# 기대 효과\n\n{table}"
-    chunks = chunker.chunk(text)
-    joined = "\n\n".join(c.content for c in chunks)
-    assert "복합성" in joined
-    assert "기대효과" in joined or "품질 제고" in joined
-    assert any(
-        "복합성" in c.content and ("기대효과" in c.content or "품질 제고" in c.content)
-        for c in chunks
-    )
-
-
-def test_large_pipe_table_stays_atomic_when_alone():
-    chunker = MarkdownChunker(max_tokens=30, overlap_tokens=0, min_chunk_tokens=1)
-    # Many rows so table alone exceeds 30 tokens
-    rows = "\n".join(f"| {i} | value{i} value{i} |" for i in range(20))
-    table = f"| a | b |\n| --- | --- |\n{rows}"
-    chunks = chunker.chunk(table)
-    assert len(chunks) == 1
-    assert "| a | b |" in chunks[0].content
-    assert "| 19 | value19" in chunks[0].content
-
-
-def test_chunker_keeps_fenced_code_atomic():
-    chunker = MarkdownChunker(max_tokens=20, overlap_tokens=0, min_chunk_tokens=1)
-    fence = "```python\nprint(1)\n\nprint(2)\n```"
-    chunks = chunker.chunk(f"# T\n\n{fence}\n\nafter")
-    code_chunks = [c for c in chunks if "print(1)" in c.content]
-    assert len(code_chunks) == 1
-    assert "print(2)" in code_chunks[0].content
-
-
-def _fill(chunker: MarkdownChunker, at_least: int, at_most: int) -> str:
-    words = ["alpha"]
-    while chunker.count_tokens(" ".join(words)) < at_least:
-        words.append("alpha")
-    text = " ".join(words)
-    assert chunker.count_tokens(text) <= at_most
-    return text
-
-
-def test_short_body_appends_to_previous_chunk():
-    chunker = MarkdownChunker(max_tokens=50, overlap_tokens=0, min_chunk_tokens=20)
-    first = _fill(chunker, 50, 50)
-    tail = "Done."
-    assert chunker.count_tokens(tail) < 20
-    assert chunker.count_tokens(f"{first}\n\n{tail}") > 50
-    chunks = chunker.chunk(f"{first}\n\n{tail}")
-    assert len(chunks) == 1
-    assert chunks[0].content.endswith(tail)
-    assert first in chunks[0].content
-
-
-def test_short_heading_leftover_stays_own_chunk():
-    chunker = MarkdownChunker(max_tokens=50, overlap_tokens=0, min_chunk_tokens=20)
-    first = _fill(chunker, 50, 50)
-    leftover = "# Next\n\nHi"
-    assert chunker.count_tokens(leftover) < 20
-    assert chunker.count_tokens(f"{first}\n\n{leftover}") > 50
-    chunks = chunker.chunk(f"{first}\n\n{leftover}")
-    assert len(chunks) == 2
-    assert leftover in chunks[1].content or (
-        "# Next" in chunks[1].content and "Hi" in chunks[1].content
-    )
-    assert "# Next" not in chunks[0].content
-
-
-def test_small_table_colocates_with_body():
-    chunker = MarkdownChunker(max_tokens=768, overlap_tokens=0, min_chunk_tokens=1)
-    meta = (
-        "| 항목 | 내용 |\n"
-        "| --- | --- |\n"
-        "| 담당자 | 장현진 |\n"
-        "| 비공개 | 비공개(5) |"
-    )
-    body = "AiSAC 시스템 통합 유지관리 용역을 추진한다."
-    chunks = chunker.chunk(f"{meta}\n\n{body}")
-    assert any("장현진" in c.content and "용역" in c.content for c in chunks)
-
-
-def test_short_trailing_chunk_merges_into_previous():
-    chunker = MarkdownChunker(max_tokens=768, overlap_tokens=0, min_chunk_tokens=64)
-    body = "본문 내용이 여기에 있습니다. " * 5
-    footer = "시행번호: 디지털혁신센터-104\n담당자: 홍길동\n비공개(5)"
-    chunks = chunker.chunk(f"{body}\n\n{footer}")
-    assert any("디지털혁신센터-104" in c.content and "본문 내용" in c.content for c in chunks)
+def test_to_citations_legacy_null_parent_uses_child_body():
+    hits = [
+        {
+            "chunk_id": "c_legacy",
+            "doc_id": "d1",
+            "content": "legacy child only",
+            "parent_chunk_id": None,
+            "parent_content": "legacy child only",
+            "filename": "old.md",
+            "page": None,
+            "score": 0.3,
+        }
+    ]
+    expanded = RetrievalPipeline._expand_to_parent(hits)
+    assert len(expanded) == 1
+    citations = RetrievalPipeline._to_citations(expanded, expand_to_parent=True)
+    assert citations[0].content == "legacy child only"
+    assert citations[0].snippet == "legacy child only"

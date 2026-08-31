@@ -126,7 +126,7 @@ Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패
 
 ### 3.3 Chunking 전략
 
-LlamaIndex Element 경계 + ChunkBag (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
+LlamaIndex `HierarchicalNodeParser` 2단 (`parent_max_tokens` 2048 → `max_tokens` 768, `overlap_tokens` 128). child만 embed·검색, retrieve 시 parent expand.  
 메타 표·푸터는 본문과 합친다. 상세: [`CHUNKING.md`](CHUNKING.md).  
 다음: 검색=child / 생성=parent — [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md).
 

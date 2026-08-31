@@ -8,7 +8,7 @@ from rag.config import get_settings
 from rag.db.models import Chunk, Document, DocumentStatus, Group, IngestJob, JobStatus
 from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
-from rag.ingestion.chunker import MarkdownChunker
+from rag.ingestion.chunker import MarkdownChunker, TextChunk
 from rag.ingestion.markdown import to_markdown
 from rag.observability.logging import get_logger
 from rag.observability.metrics import INGEST_COUNTER
@@ -26,10 +26,8 @@ class IngestionPipeline:
 
         self.chunker = MarkdownChunker(
             max_tokens=chunk_cfg.get("max_tokens", 768),
+            parent_max_tokens=chunk_cfg.get("parent_max_tokens", 2048),
             overlap_tokens=chunk_cfg.get("overlap_tokens", 128),
-            min_chunk_tokens=chunk_cfg.get("min_chunk_tokens", 64),
-            small_table_max_tokens=chunk_cfg.get("small_table_max_tokens", 128),
-            small_table_max_rows=chunk_cfg.get("small_table_max_rows", 8),
         )
         self.batch_size = ingest_cfg.get("bulk_batch_size", 100)
         self.storage = ObjectStorage()
@@ -72,41 +70,20 @@ class IngestionPipeline:
             if not all_text_chunks:
                 raise ValueError("No content extracted from document")
 
-            texts = [c.content for c in all_text_chunks]
-            embeddings = self.embedding_service.embed_texts(texts)
+            parents = [c for c in all_text_chunks if c.role == "parent"]
+            children = [c for c in all_text_chunks if c.role == "child"]
+            if not children:
+                raise ValueError("No searchable child chunks extracted from document")
 
-            db_chunks: list[Chunk] = []
-            index_docs = []
+            parent_id_by_key = self._insert_parents(session, document, parents)
+            await session.flush()
+            child_rows, index_docs = self._prepare_children(
+                document,
+                children,
+                parent_id_by_key,
+            )
 
-            for text_chunk, embedding in zip(all_text_chunks, embeddings, strict=True):
-                chunk_id = uuid.uuid4()
-
-                db_chunk = Chunk(
-                    id=chunk_id,
-                    doc_id=document.id,
-                    group_id=document.group_id,
-                    chunk_index=text_chunk.chunk_index,
-                    content=text_chunk.content,
-                    token_count=text_chunk.token_count,
-                    page=text_chunk.page,
-                )
-                db_chunks.append(db_chunk)
-
-                index_docs.append(
-                    build_index_document(
-                        chunk_id=str(chunk_id),
-                        doc_id=str(document.id),
-                        content=text_chunk.content,
-                        embedding=embedding,
-                        group_id=str(document.group_id),
-                        filename=document.filename,
-                        page=text_chunk.page,
-                        chunk_index=text_chunk.chunk_index,
-                        token_count=text_chunk.token_count,
-                    )
-                )
-
-            session.add_all(db_chunks)
+            session.add_all(child_rows)
             await session.flush()
             # Rows must be committed before UPDATE so the same worker session
             # (or a later statement) can see them after DDL / a prior commit.
@@ -120,7 +97,7 @@ class IngestionPipeline:
                     raise RuntimeError(f"Failed to index {errors} chunks")
 
             document.status = DocumentStatus.COMPLETED
-            document.chunk_count = len(db_chunks)
+            document.chunk_count = len(children)
             document.error_message = None
             document.updated_at = datetime.now(UTC)
 
@@ -128,10 +105,11 @@ class IngestionPipeline:
             logger.info(
                 "document_ingested",
                 doc_id=str(doc_id),
-                chunk_count=len(db_chunks),
+                chunk_count=len(children),
+                parent_count=len(parents),
                 backend=self.search_backend.name,
             )
-            return len(db_chunks)
+            return len(children)
 
         except Exception as e:
             document.status = DocumentStatus.FAILED
@@ -139,6 +117,84 @@ class IngestionPipeline:
             INGEST_COUNTER.labels(status="failed").inc()
             logger.error("document_ingest_failed", doc_id=str(doc_id), error=str(e))
             raise
+
+    def _insert_parents(
+        self,
+        session: AsyncSession,
+        document: Document,
+        parents: list[TextChunk],
+    ) -> dict[str, uuid.UUID]:
+        parent_id_by_key: dict[str, uuid.UUID] = {}
+        db_parents: list[Chunk] = []
+        for parent in parents:
+            if parent.parent_key is None:
+                continue
+            chunk_id = uuid.uuid4()
+            parent_id_by_key[parent.parent_key] = chunk_id
+            db_parents.append(
+                Chunk(
+                    id=chunk_id,
+                    doc_id=document.id,
+                    group_id=document.group_id,
+                    chunk_index=parent.chunk_index,
+                    content=parent.content,
+                    token_count=parent.token_count,
+                    page=parent.page,
+                    role="parent",
+                    kind=parent.kind,
+                    parent_chunk_id=None,
+                )
+            )
+        if db_parents:
+            session.add_all(db_parents)
+        return parent_id_by_key
+
+    def _prepare_children(
+        self,
+        document: Document,
+        children: list[TextChunk],
+        parent_id_by_key: dict[str, uuid.UUID],
+    ) -> tuple[list[Chunk], list[dict]]:
+        texts = [c.content for c in children]
+        embeddings = self.embedding_service.embed_texts(texts)
+
+        db_chunks: list[Chunk] = []
+        index_docs: list[dict] = []
+        for text_chunk, embedding in zip(children, embeddings, strict=True):
+            chunk_id = uuid.uuid4()
+            parent_chunk_id = (
+                parent_id_by_key.get(text_chunk.parent_key)
+                if text_chunk.parent_key
+                else None
+            )
+            db_chunks.append(
+                Chunk(
+                    id=chunk_id,
+                    doc_id=document.id,
+                    group_id=document.group_id,
+                    chunk_index=text_chunk.chunk_index,
+                    content=text_chunk.content,
+                    token_count=text_chunk.token_count,
+                    page=text_chunk.page,
+                    role="child",
+                    kind=text_chunk.kind,
+                    parent_chunk_id=parent_chunk_id,
+                )
+            )
+            index_docs.append(
+                build_index_document(
+                    chunk_id=str(chunk_id),
+                    doc_id=str(document.id),
+                    content=text_chunk.content,
+                    embedding=embedding,
+                    group_id=str(document.group_id),
+                    filename=document.filename,
+                    page=text_chunk.page,
+                    chunk_index=text_chunk.chunk_index,
+                    token_count=text_chunk.token_count,
+                )
+            )
+        return db_chunks, index_docs
 
 
 async def create_document_record(
