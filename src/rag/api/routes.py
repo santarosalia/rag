@@ -43,6 +43,37 @@ router = APIRouter(prefix="/v1")
 router.include_router(groups_router)
 
 
+async def _enqueue_docling_json(
+    db: AsyncSession,
+    *,
+    group_id: str,
+    filename: str,
+    content_type: str,
+    data: bytes,
+) -> DocumentUploadResponse:
+    await require_group(db, group_id)
+    storage = ObjectStorage()
+    document, job = await create_document_record(
+        db,
+        filename=filename,
+        content_type=content_type,
+        s3_key="pending",
+        group_id=group_id,
+        parse_kind="docling_json",
+    )
+    stored = storage.upload(data, "content.json", doc_id=document.id)
+    document.s3_key = stored.key
+    await db.flush()
+    task = _enqueue_ingest(str(document.id), str(job.id))
+    job.celery_task_id = task.id
+    await db.flush()
+    return DocumentUploadResponse(
+        doc_id=document.id,
+        job_id=job.id,
+        status=DocumentStatus.PENDING,
+    )
+
+
 async def _enqueue_parsed_markdown(
     db: AsyncSession,
     *,
@@ -167,6 +198,31 @@ async def upload_parsed_markdown_file(
         filename=citation_name,
         content_type=file.content_type or "text/markdown",
         data=data,
+    )
+
+
+@router.post("/documents/docling/file", response_model=DocumentUploadResponse)
+async def upload_docling_json_file(
+    file: UploadFile = File(...),
+    group_id: str | None = Form(default=None),
+    filename: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUploadResponse:
+    if not group_id or not group_id.strip():
+        raise HTTPException(status_code=400, detail="group_id is required")
+    citation_name = (filename or file.filename or "").strip()
+    if not citation_name:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+    return await _enqueue_docling_json(
+        db,
+        group_id=group_id.strip(),
+        filename=citation_name,
+        content_type=file.content_type or "application/json",
+        data=raw,
     )
 
 

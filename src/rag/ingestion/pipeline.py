@@ -9,6 +9,7 @@ from rag.db.models import Chunk, Document, DocumentStatus, Group, IngestJob, Job
 from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
 from rag.ingestion.chunker import SemanticChunker
+from rag.ingestion.docling_items import items_to_chunks, load_docling_items
 from rag.ingestion.markdown import to_markdown
 from rag.observability.logging import get_logger
 from rag.observability.metrics import INGEST_COUNTER
@@ -56,16 +57,24 @@ class IngestionPipeline:
 
         try:
             data = self.storage.download(document.s3_key)
-            markdown = to_markdown(
-                data,
-                filename=document.filename,
-                already_markdown=document.parse_kind == "markdown",
-            )
+            if document.parse_kind == "docling_json":
+                items = load_docling_items(data)
+                chunk_cfg = get_settings().yaml_config.get("chunking", {})
+                all_text_chunks = items_to_chunks(
+                    items,
+                    max_tokens=chunk_cfg.get("max_tokens", 768),
+                    overlap_tokens=chunk_cfg.get("overlap_tokens", 128),
+                )
+            else:
+                markdown = to_markdown(
+                    data,
+                    filename=document.filename,
+                    already_markdown=document.parse_kind == "markdown",
+                )
+                all_text_chunks = self.chunker.chunk(markdown)
 
             await session.execute(delete(Chunk).where(Chunk.doc_id == document.id))
             await session.flush()
-
-            all_text_chunks = self.chunker.chunk(markdown)
 
             if not all_text_chunks:
                 raise ValueError("No content extracted from document")
