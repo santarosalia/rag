@@ -2,6 +2,7 @@ chunking:
   max_tokens: 768
   parent_max_tokens: 2048
   overlap_tokens: 128
+  table_child_max_tokens: 256
 
 retrieval:
   dense_k: 50

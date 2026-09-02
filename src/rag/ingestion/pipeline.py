@@ -28,6 +28,7 @@ class IngestionPipeline:
             max_tokens=chunk_cfg.get("max_tokens", 768),
             parent_max_tokens=chunk_cfg.get("parent_max_tokens", 2048),
             overlap_tokens=chunk_cfg.get("overlap_tokens", 128),
+            table_child_max_tokens=chunk_cfg.get("table_child_max_tokens", 256),
         )
         self.batch_size = ingest_cfg.get("bulk_batch_size", 100)
         self.storage = ObjectStorage()

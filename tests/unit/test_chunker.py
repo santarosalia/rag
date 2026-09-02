@@ -125,3 +125,58 @@ def test_to_citations_legacy_null_parent_uses_child_body():
     citations = RetrievalPipeline._to_citations(expanded, expand_to_parent=True)
     assert citations[0].content == "legacy child only"
     assert citations[0].snippet == "legacy child only"
+
+
+def test_pipe_table_is_table_child():
+    chunker = MarkdownChunker()
+    chunks = chunker.chunk(
+        "# Scope\n\nIntro.\n\n| Team | Work |\n| --- | --- |\n| IT | 보안취약점 점검 |\n\nAfter."
+    )
+    tables = [c for c in chunks if c.role == "child" and c.kind == "table"]
+    assert len(tables) == 1
+    assert "보안취약점 점검" in tables[0].content
+    assert "Team" in tables[0].content
+    parent = next(p for p in chunks if p.role == "parent" and p.parent_key == tables[0].parent_key)
+    assert "보안취약점 점검" in parent.content
+
+
+def test_html_table_is_table_child():
+    chunker = MarkdownChunker()
+    table = "<table><tr><td>전문인력지원</td><td>보안취약점 점검</td></tr></table>"
+    chunks = chunker.chunk(f"# Scope\n\nIntro text.\n{table}\nFollowing sentence.")
+    tables = [c for c in chunks if c.role == "child" and c.kind == "table"]
+    assert len(tables) == 1
+    assert table in tables[0].content or "보안취약점 점검" in tables[0].content
+
+
+def test_heading_is_kept_in_prose():
+    chunker = MarkdownChunker()
+    chunks = chunker.chunk("# Contract\n\nBody paragraph about the vendor.")
+    children = [c for c in chunks if c.role == "child"]
+    blob = "\n".join(c.content for c in children)
+    assert "Contract" in blob
+    assert "Body paragraph" in blob
+
+
+def test_code_fence_is_atomic():
+    chunker = MarkdownChunker()
+    chunks = chunker.chunk("Before.\n\n```python\nprint(1)\n```\n\nAfter.")
+    fences = [c for c in chunks if c.role == "child" and c.kind == "fence"]
+    assert len(fences) == 1
+    assert "print(1)" in fences[0].content
+
+
+def test_large_pipe_table_splits_into_row_groups():
+    header = "| Col | Val |\n| --- | --- |\n"
+    rows = "".join(f"| r{i} | value-{i} |\n" for i in range(40))
+    chunker = MarkdownChunker(
+        max_tokens=80,
+        parent_max_tokens=400,
+        overlap_tokens=0,
+        table_child_max_tokens=60,
+    )
+    children = [c for c in chunker.chunk(header + rows) if c.role == "child" and c.kind == "table"]
+    assert len(children) > 1
+    assert all("Col" in c.content for c in children)
+    assert "value-0" in children[0].content
+    assert "value-39" in children[-1].content
