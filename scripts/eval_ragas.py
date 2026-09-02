@@ -297,16 +297,19 @@ async def collect_samples(
     if runner == "api":
         client = httpx.Client(base_url=api_url, timeout=120.0)
 
-    try:
-        for item in data["items"]:
-            if item.get("skip"):
-                continue
+    active_items = [item for item in data["items"] if not item.get("skip")]
+    total = len(active_items)
+    print(f"Phase 1/2: collecting answers ({total} items, runner={runner})", flush=True)
 
+    try:
+        for index, item in enumerate(active_items, start=1):
+            item_id = item.get("id") or f"item-{index}"
             question = item["question"]
             group_id = item.get("group_id", defaults["group_id"])
             top_k = item.get("top_k", defaults["top_k"])
             reference = (item.get("ground_truth") or item.get("reference") or "").strip()
 
+            print(f"  [{index}/{total}] query {item_id} …", flush=True)
             if runner == "direct":
                 answer, contexts, latency_ms, backend, citations = await query_direct(
                     question, group_id, top_k
@@ -324,7 +327,15 @@ async def collect_samples(
                 )
 
             if not contexts:
-                print(f"warning: {item.get('id', '?')} returned no contexts", file=sys.stderr)
+                print(f"warning: {item_id} returned no contexts", file=sys.stderr)
+
+            total_ms = latency_ms.get("total_ms") if isinstance(latency_ms, dict) else None
+            latency_note = f", {total_ms:.0f}ms" if isinstance(total_ms, (int, float)) else ""
+            print(
+                f"  [{index}/{total}] done  {item_id} "
+                f"(contexts={len(citations) or len(contexts)}{latency_note})",
+                flush=True,
+            )
 
             row: dict[str, Any] = {
                 "user_input": question,
@@ -351,6 +362,7 @@ async def collect_samples(
         if client is not None:
             client.close()
 
+    print(f"Phase 1/2 complete: {len(rows)} answers collected", flush=True)
     return rows, traces
 
 
@@ -426,6 +438,9 @@ def run_ragas(
     metric_names: list[str],
     judge_cfg: dict[str, Any],
     embeddings_cfg: dict[str, Any],
+    *,
+    batch_size: int = 1,
+    item_ids: list[str] | None = None,
 ) -> tuple[dict[str, float], dict[str, Any]]:
     from ragas import EvaluationDataset, evaluate
     from ragas.embeddings.base import embedding_factory
@@ -460,15 +475,52 @@ def run_ragas(
         embeddings = embedding_factory("openai", model=emb_model, client=emb_client)
 
     metrics, resolved_names = build_metrics(metric_names, llm, embeddings)
-    dataset = EvaluationDataset.from_list(rows)
-    result = evaluate(dataset=dataset, metrics=metrics, llm=llm, show_progress=True)
+    total = len(rows)
+    ids = item_ids or [f"row-{i + 1}" for i in range(total)]
+    print(
+        f"Phase 2/2: RAGAS judging ({total} items × {len(resolved_names)} metrics, "
+        f"batch_size={batch_size})",
+        flush=True,
+    )
 
-    scores, raw_scores = aggregate_ragas_scores(result)
+    # Score in small batches so progress advances instead of staying at 0% until the end.
+    chunk = max(1, batch_size)
+    raw_scores: list[Any] = []
+    for start in range(0, total, chunk):
+        end = min(start + chunk, total)
+        batch_rows = rows[start:end]
+        batch_ids = ids[start:end]
+        label = ", ".join(str(x) for x in batch_ids[:3])
+        if len(batch_ids) > 3:
+            label += f", …(+{len(batch_ids) - 3})"
+        print(f"  [{end}/{total}] judging {label} …", flush=True)
+        dataset = EvaluationDataset.from_list(batch_rows)
+        result = evaluate(
+            dataset=dataset,
+            metrics=metrics,
+            llm=llm,
+            show_progress=True,
+            batch_size=chunk,
+        )
+        _, batch_raw = aggregate_ragas_scores(result)
+        if isinstance(batch_raw, list):
+            raw_scores.extend(batch_raw)
+        elif batch_raw is not None:
+            raw_scores.append(batch_raw)
+        print(f"  [{end}/{total}] judged  {label}", flush=True)
+
+    # Recompute means from concatenated per-sample scores.
+    class _Merged:
+        scores = raw_scores
+        _repr_dict = None
+
+    scores, _ = aggregate_ragas_scores(_Merged())
     details = {
         "scores": scores,
         "raw": json_safe(raw_scores),
         "metric_names": resolved_names,
     }
+    print("Phase 2/2 complete", flush=True)
     return scores, details
 
 
@@ -501,6 +553,12 @@ def main() -> None:
         "--dry-run",
         action="store_true",
         help="Collect RAG answers only; skip RAGAS judge",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1,
+        help="RAGAS judge batch size (default: 1 for visible per-item progress)",
     )
     args = parser.parse_args()
     load_dotenv_file()
@@ -540,11 +598,14 @@ def main() -> None:
         if args.dry_run:
             report["dry_run"] = True
         else:
+            item_ids = [str(t.get("id") or f"row-{i + 1}") for i, t in enumerate(traces)]
             scores, ragas_details = run_ragas(
                 rows,
                 metric_names,
                 defaults["judge"],
                 defaults["embeddings"],
+                batch_size=max(1, args.batch_size),
+                item_ids=item_ids,
             )
             thresholds = defaults["thresholds"]
             passed = check_thresholds(scores, thresholds) if thresholds else {}
