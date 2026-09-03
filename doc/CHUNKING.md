@@ -6,7 +6,7 @@
 
 관련: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) (입력은 Markdown) · [`RAG_PLANNING.md`](RAG_PLANNING.md) §3.3 · 다음 단계 [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md)
 
-청커는 **원본 PDF/DOCX를 보지 않는다.** 경로 A(MarkItDown)든 경로 B(파싱본)든 합류점은 Markdown이다.
+청커는 **원본 PDF/DOCX를 보지 않는다.** 입력은 이미 파싱된 UTF-8 Markdown이다.
 
 ---
 

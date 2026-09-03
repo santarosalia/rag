@@ -10,7 +10,9 @@ from rag.db.models import DocumentStatus as DBDocumentStatus
 from rag.db.session import get_db
 from rag.generation.service import QueryService
 from rag.groups.service import require_group, resolve_search_group
+from rag.ingestion.parser_client import ParserClient, ParserError
 from rag.ingestion.pipeline import create_document_record
+from rag.models.parse import ParseResponse
 from rag.models.schemas import (
     DocumentResponse,
     DocumentStatus,
@@ -43,13 +45,14 @@ router = APIRouter(prefix="/v1")
 router.include_router(groups_router)
 
 
-async def _enqueue_docling_json(
+async def _enqueue_markdown(
     db: AsyncSession,
     *,
     group_id: str,
     filename: str,
     content_type: str,
     data: bytes,
+    parse: ParseResponse | None = None,
 ) -> DocumentUploadResponse:
     await require_group(db, group_id)
     storage = ObjectStorage()
@@ -59,38 +62,6 @@ async def _enqueue_docling_json(
         content_type=content_type,
         s3_key="pending",
         group_id=group_id,
-        parse_kind="docling_json",
-    )
-    stored = storage.upload(data, "content.json", doc_id=document.id)
-    document.s3_key = stored.key
-    await db.flush()
-    task = _enqueue_ingest(str(document.id), str(job.id))
-    job.celery_task_id = task.id
-    await db.flush()
-    return DocumentUploadResponse(
-        doc_id=document.id,
-        job_id=job.id,
-        status=DocumentStatus.PENDING,
-    )
-
-
-async def _enqueue_parsed_markdown(
-    db: AsyncSession,
-    *,
-    group_id: str,
-    filename: str,
-    content_type: str,
-    data: bytes,
-) -> DocumentUploadResponse:
-    await require_group(db, group_id)
-    storage = ObjectStorage()
-    document, job = await create_document_record(
-        db,
-        filename=filename,
-        content_type=content_type,
-        s3_key="pending",
-        group_id=group_id,
-        parse_kind="markdown",
     )
     stored = storage.upload(data, "content.md", doc_id=document.id)
     document.s3_key = stored.key
@@ -102,6 +73,7 @@ async def _enqueue_parsed_markdown(
         doc_id=document.id,
         job_id=job.id,
         status=DocumentStatus.PENDING,
+        parse=parse,
     )
 
 
@@ -116,41 +88,40 @@ def _utf8_markdown(data: bytes) -> bytes:
 async def upload_document(
     file: UploadFile = File(...),
     group_id: str | None = Form(default=None),
+    filename: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required")
+    """Upload a source file, parse via Parser Service, then queue Markdown ingest."""
     if not group_id or not group_id.strip():
         raise HTTPException(status_code=400, detail="group_id is required")
+    citation_name = (filename or file.filename or "").strip()
+    if not citation_name:
+        raise HTTPException(status_code=400, detail="Filename is required")
 
-    data = await file.read()
-    if not data:
+    raw = await file.read()
+    if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    await require_group(db, group_id)
+    try:
+        parse = await ParserClient().parse(
+            raw,
+            filename=citation_name,
+            content_type=file.content_type,
+            output_format="markdown",
+        )
+        markdown = parse.markdown_text()
+    except ParserError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    storage = ObjectStorage()
-
-    document, job = await create_document_record(
+    return await _enqueue_markdown(
         db,
-        filename=file.filename,
+        group_id=group_id.strip(),
+        filename=citation_name,
         content_type=file.content_type or "application/octet-stream",
-        s3_key="pending",
-        group_id=group_id,
-    )
-
-    stored = storage.upload(data, file.filename, doc_id=document.id)
-    document.s3_key = stored.key
-    await db.flush()
-
-    task = _enqueue_ingest(str(document.id), str(job.id))
-    job.celery_task_id = task.id
-    await db.flush()
-
-    return DocumentUploadResponse(
-        doc_id=document.id,
-        job_id=job.id,
-        status=DocumentStatus.PENDING,
+        data=markdown.encode("utf-8"),
+        parse=parse,
     )
 
 
@@ -166,7 +137,7 @@ async def upload_parsed_document(
     if not filename:
         raise HTTPException(status_code=400, detail="filename is required")
 
-    return await _enqueue_parsed_markdown(
+    return await _enqueue_markdown(
         db,
         group_id=body.group_id,
         filename=filename,
@@ -192,37 +163,12 @@ async def upload_parsed_markdown_file(
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
     data = _utf8_markdown(raw)
-    return await _enqueue_parsed_markdown(
+    return await _enqueue_markdown(
         db,
         group_id=group_id.strip(),
         filename=citation_name,
         content_type=file.content_type or "text/markdown",
         data=data,
-    )
-
-
-@router.post("/documents/docling/file", response_model=DocumentUploadResponse)
-async def upload_docling_json_file(
-    file: UploadFile = File(...),
-    group_id: str | None = Form(default=None),
-    filename: str | None = Form(default=None),
-    db: AsyncSession = Depends(get_db),
-) -> DocumentUploadResponse:
-    if not group_id or not group_id.strip():
-        raise HTTPException(status_code=400, detail="group_id is required")
-    citation_name = (filename or file.filename or "").strip()
-    if not citation_name:
-        raise HTTPException(status_code=400, detail="Filename is required")
-
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="Empty file")
-    return await _enqueue_docling_json(
-        db,
-        group_id=group_id.strip(),
-        filename=citation_name,
-        content_type=file.content_type or "application/json",
-        data=raw,
     )
 
 

@@ -1,7 +1,7 @@
 # material Docling JSON 기반 — 문서당 심플 질의 5문항 (총 50)
 #
-# 코퍼스: tests/material/{1..10}.json 을 parse_kind=docling_json 으로 적재
-#   uv run python scripts/ingest_docling_json.py tests/material --group-id material
+# 코퍼스: Markdown으로 변환 후 POST /v1/documents 로 적재
+#   uv run python scripts/ingest_cli.py tests/material --group-id material
 #
 # Usage:
 #   uv run python scripts/eval_ragas.py tests/eval/ragas_input/material-simple.yaml --dry-run

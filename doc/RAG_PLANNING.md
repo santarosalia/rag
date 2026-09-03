@@ -34,15 +34,16 @@
 
 ### 1.4 파싱 경계 (적재는 이 저장소)
 
-Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적재·검색은 **본 저장소**가 담당한다. 바깥으로 둘 수 있는 것은 **원본 파싱**뿐이다.
+Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적재·검색은 **본 저장소**가 담당한다. **원본 파싱(PDF/OCR 등)은 하지 않는다** — UTF-8 Markdown만 받는다.
 
-| 경로 | 입력 | 파싱 | 이후 |
-|------|------|------|------|
-| A. 원본 | `POST /v1/documents` 파일 | 이 저장소 MarkItDown | 동일 적재 파이프라인 |
-| B. 파싱본 | `POST /v1/documents/parsed` JSON 또는 `/parsed/file` | 외부 파서 | 동일 적재 파이프라인 |
+| API | 입력 |
+|-----|------|
+| `POST /v1/documents` | Markdown 파일 |
+| `POST /v1/documents/parsed` | Markdown JSON |
+| `POST /v1/documents/parsed/file` | Markdown 파일 |
 
-외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다. 중간 포맷은 Markdown.  
-→ 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md)
+외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다.  
+→ 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md) (Superseded → Markdown-only)
 
 ---
 
@@ -110,19 +111,20 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 ### 3.1 흐름
 
 ```
-Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패스스루)
+Upload (UTF-8 Markdown) → S3 저장 → Celery Job
        → Semantic Chunker → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
        → PostgreSQL documents 상태 갱신
 ```
 
 ### 3.2 지원 문서 포맷
 
-경로 A는 원본을 **MarkItDown**으로 Markdown으로 맞춘 뒤 적재한다. 경로 B는 이미 변환된 Markdown을 받는다. 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md).
+**Markdown만.** PDF/Office 파싱은 외부. 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md).
 
-| 경로 | 입력 | 변환 |
-|------|------|------|
-| A. 원본 | `POST /v1/documents` PDF/DOCX/PPTX 등 | 이 저장소 MarkItDown |
-| B. 파싱본 | `POST /v1/documents/parsed` JSON 또는 `/parsed/file` | 패스스루 |
+| API | 입력 |
+|-----|------|
+| `POST /v1/documents` | Markdown 파일 |
+| `POST /v1/documents/parsed` | Markdown JSON |
+| `POST /v1/documents/parsed/file` | Markdown 파일 |
 
 ### 3.3 Chunking 전략
 

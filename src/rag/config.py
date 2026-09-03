@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     embedding_device: str = "cpu"
 
+    parse_api_base_url: str = "http://192.168.14.248:17000"
+    parse_api_timeout_seconds: float = 300.0
+
     config_path: Path = Field(default=Path("configs/default.yaml"))
 
     @property

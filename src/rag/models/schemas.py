@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_serializer
 
 from rag.groups.ids import GROUP_ID_MAX_LENGTH, GROUP_ID_PATTERN_STR
+from rag.models.parse import ParseResponse
 
 GroupId = Annotated[
     str,
@@ -32,6 +33,7 @@ class DocumentUploadResponse(BaseModel):
     job_id: UUID
     status: DocumentStatus
     message: str = "Document queued for ingestion"
+    parse: ParseResponse | None = None
 
 
 class DocumentResponse(BaseModel):

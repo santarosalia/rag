@@ -9,14 +9,19 @@ from rag.db.models import Chunk, Document, DocumentStatus, Group, IngestJob, Job
 from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
 from rag.ingestion.chunker import SemanticChunker
-from rag.ingestion.docling_items import items_to_chunks, load_docling_items
-from rag.ingestion.markdown import to_markdown
 from rag.observability.logging import get_logger
 from rag.observability.metrics import INGEST_COUNTER
 from rag.retrieval.embeddings import get_embedding_service
 from rag.storage.s3 import ObjectStorage
 
 logger = get_logger(__name__)
+
+
+def decode_markdown(data: bytes) -> str:
+    text = data.decode("utf-8-sig", errors="replace").strip()
+    if not text:
+        raise ValueError("No content extracted from document")
+    return text
 
 
 class IngestionPipeline:
@@ -57,21 +62,8 @@ class IngestionPipeline:
 
         try:
             data = self.storage.download(document.s3_key)
-            if document.parse_kind == "docling_json":
-                items = load_docling_items(data)
-                chunk_cfg = get_settings().yaml_config.get("chunking", {})
-                all_text_chunks = items_to_chunks(
-                    items,
-                    max_tokens=chunk_cfg.get("max_tokens", 768),
-                    overlap_tokens=chunk_cfg.get("overlap_tokens", 128),
-                )
-            else:
-                markdown = to_markdown(
-                    data,
-                    filename=document.filename,
-                    already_markdown=document.parse_kind == "markdown",
-                )
-                all_text_chunks = self.chunker.chunk(markdown)
+            markdown = decode_markdown(data)
+            all_text_chunks = self.chunker.chunk(markdown)
 
             await session.execute(delete(Chunk).where(Chunk.doc_id == document.id))
             await session.flush()
@@ -155,14 +147,12 @@ async def create_document_record(
     content_type: str,
     s3_key: str,
     group_id: str,
-    parse_kind: str = "original",
 ) -> tuple[Document, IngestJob]:
     document = Document(
         filename=filename,
         content_type=content_type,
         s3_key=s3_key,
         group_id=group_id,
-        parse_kind=parse_kind,
         status=DocumentStatus.PENDING,
     )
     session.add(document)

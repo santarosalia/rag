@@ -17,8 +17,7 @@ flowchart TB
   end
 
   subgraph ingest [Ingestion]
-    Upload[Document Upload]
-    MD[MarkItDown / parsed Markdown]
+    Upload[Markdown Upload]
     Chunker[Semantic Chunker]
     EmbedWorker[Embedding BGE-M3]
     MorphWorker[Kiwi Morphology]
@@ -43,7 +42,7 @@ flowchart TB
   FastAPI --> Upload
   Upload --> S3
   Upload --> CeleryWorker
-  CeleryWorker --> MD --> Chunker --> EmbedWorker
+  CeleryWorker --> Chunker --> EmbedWorker
   EmbedWorker --> MorphWorker --> PG
 
   FastAPI --> Dense
@@ -126,9 +125,8 @@ src/rag/
 │   ├── filter.py     # retrieve SQL 필터
 │   └── service.py    # CRUD, 삭제 정책
 ├── ingestion/
-│   ├── markdown.py   # MarkItDown / 경로 B 패스스루
 │   ├── chunker.py    # SemanticChunker (헤딩·표)
-│   └── pipeline.py   # IngestionPipeline
+│   └── pipeline.py   # IngestionPipeline (UTF-8 Markdown)
 ├── retrieval/
 │   ├── embeddings.py # BGE-M3, reranker, cache
 │   ├── fusion.py     # RRF
@@ -161,13 +159,8 @@ src/rag/
 ```mermaid
 flowchart LR
   subgraph entry [진입점]
-    A[POST /v1/documents 원본]
+    A[POST /v1/documents Markdown]
     B[POST /v1/documents/parsed]
-  end
-
-  subgraph parse [파싱]
-    MD[MarkItDown 이 저장소]
-    Ext[외부 파서]
   end
 
   subgraph load [적재 - 이 저장소]
@@ -180,16 +173,16 @@ flowchart LR
   end
 
   PG[(PostgreSQL documents + chunks)]
+  Ext[외부 파서]
 
-  A --> MD --> Chunk
+  Ext -->|Markdown| A --> Chunk
   Ext -->|Markdown| B --> Chunk
   Chunk --> PG
   Retrieve --> PG
   Query --> Retrieve
 ```
 
-- 경로 A: 원본 → MarkItDown → 공통 적재
-- 경로 B: 외부 Markdown → 공통 적재 (PG 직접 write 없음)
+- 이 저장소는 PDF/Office 파싱 없음. UTF-8 Markdown만 수신
 - 검색: `chunks` JOIN `documents` (`filename`, `page`, `group_id`)
 
 계약: [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md)
@@ -198,7 +191,7 @@ flowchart LR
 
 | 확장 | 방법 |
 |------|------|
-| 새 문서 포맷 | 경로 A MarkItDown extras, 또는 경로 B 외부 파서 |
+| 새 문서 포맷 | 외부에서 Markdown으로 변환 후 업로드 |
 | 새 embedding 모델 | `EMBEDDING_MODEL` env + `vector(N)` dimension 변경 |
 | LLM provider 교체 | `LLM_BASE_URL` + `LLM_API_KEY` |
 | Tenant 격리 | `group_id` 정확 일치 (현재) → schema-per-tenant (Phase 2) |
