@@ -88,13 +88,12 @@ def _utf8_markdown(data: bytes) -> bytes:
 async def upload_document(
     file: UploadFile = File(...),
     group_id: str | None = Form(default=None),
-    filename: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
     """Upload a source file, parse via Parser Service, then queue Markdown ingest."""
     if not group_id or not group_id.strip():
         raise HTTPException(status_code=400, detail="group_id is required")
-    citation_name = (filename or file.filename or "").strip()
+    citation_name = (file.filename or "").strip()
     if not citation_name:
         raise HTTPException(status_code=400, detail="Filename is required")
 
@@ -150,12 +149,11 @@ async def upload_parsed_document(
 async def upload_parsed_markdown_file(
     file: UploadFile = File(...),
     group_id: str | None = Form(default=None),
-    filename: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
     if not group_id or not group_id.strip():
         raise HTTPException(status_code=400, detail="group_id is required")
-    citation_name = (filename or file.filename or "").strip()
+    citation_name = (file.filename or "").strip()
     if not citation_name:
         raise HTTPException(status_code=400, detail="Filename is required")
 
