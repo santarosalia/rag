@@ -4,7 +4,7 @@
 > **구현:** [`src/rag/ingestion/parse_items.py`](../src/rag/ingestion/parse_items.py)  
 > **설정:** [`configs/default.yaml`](../configs/default.yaml) `chunking.max_tokens`
 
-관련: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md)
+관련: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · DocuOps 대비 [`DOCUOPS_RAG_STRATEGY.md`](DOCUOPS_RAG_STRATEGY.md)
 
 입력은 Parser Service(또는 `/documents/parse/file`)가 준 **레이아웃 단위**다. Markdown 전체를 SemanticChunker로 다시 자르지 않는다.
 
@@ -14,7 +14,7 @@
 
 | 키 | 기본값 | 역할 |
 |----|--------|------|
-| `max_tokens` | 768 | 한 item이 이보다 클 때만 문장·단어로 분할 |
+| `max_tokens` | 768 | 한 청크(원본/행)가 이보다 클 때만 문장·단어로 분할 |
 
 토큰 수: tiktoken `cl100k_base`. 아이템 간 **overlap 없음**.
 
@@ -24,15 +24,28 @@
 
 | 규칙 | 동작 |
 |------|------|
-| 단위 | 1 embeddable item → 1 chunk |
+| 단위 | 1 embeddable item → 1+ chunk (표는 원본 + 행) |
 | 스킵 | `number`, `header`, `footer`, 빈 markdown |
-| 제목 | `doc_title` / `paragraph_title` / `section_header` → 단독 임베딩 금지, 다음 본문 prefix |
+| 제목 | `doc_title` / `paragraph_title` / `section_header` → 단독 임베딩 금지, 다음 본문(또는 **원본 표**) prefix |
 | page | `prov[0].page_no` → `chunks.page` |
 | type | 본문 item `type` → `chunks.type` |
 | bbox | `prov[0].bbox` → `chunks.bbox` (JSONB) |
-| 초과 | 단일 item만 `max_tokens` 초과 시 분할; type/bbox/page 동일 유지 |
+| 초과 | 단일 청크만 `max_tokens` 초과 시 분할; type/bbox/page 동일 유지 |
 
-본문 예: `text`, `table`, `header_image`, `vision_footnote` 등.
+본문 예: `text`, `table`, `table_row`, `header_image`, `vision_footnote` 등.
+
+### 2.1 표 row-split (DocuOps MVP A)
+
+`type`이 `table`/`table_text` 이거나 파이프·`<table>` 본문일 때:
+
+1. **원본 표** 청크 1개 유지 (`type=table`, heading prefix는 여기에만)
+2. 데이터 행 ≥ 2이면 행마다 `type=table_row` 추가  
+   - 파이프 MD: content = `헤더줄\n데이터줄` (`|---|` 구분 줄 제외)  
+   - HTML: outer `<tr>` → 셀 텍스트를 ` | `로 이어 `헤더\n행`  
+3. 행 1개 이하면 split 없음 (원본만)
+4. 행 청크의 `page`/`bbox`는 부모 표와 동일
+
+재 ingest 후에야 검색에 반영된다.
 
 ---
 

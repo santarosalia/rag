@@ -64,7 +64,8 @@ def test_skips_number_header_footer():
 
 
 def test_table_stays_in_one_chunk_with_heading_prefix():
-    table = "<table><tr><td>a</td><td>b</td></tr></table>"
+    # Single data row → no row-split; original table only.
+    table = "<table><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td></tr></table>"
     items = [
         _item(item_type="paragraph_title", markdown="### 표"),
         _item(item_type="table", markdown=table),
@@ -77,6 +78,70 @@ def test_table_stays_in_one_chunk_with_heading_prefix():
     assert chunks[0].page == 1
     assert chunks[0].bbox is not None
     assert chunks[0].bbox["coord_origin"] == "TOPLEFT"
+
+
+def test_pipe_table_emits_original_plus_row_chunks():
+    table = (
+        "| 항목 | 값 |\n"
+        "| --- | --- |\n"
+        "| 담당 | 홍길동 |\n"
+        "| 기간 | 3개월 |"
+    )
+    items = [_item(item_type="table", markdown=table)]
+    chunks = results_to_chunks(items, max_tokens=512)
+    assert len(chunks) == 3  # original + 2 rows
+    assert chunks[0].type == "table"
+    assert chunks[0].content == table
+    rows = [c for c in chunks if c.type == "table_row"]
+    assert len(rows) == 2
+    assert rows[0].content == "| 항목 | 값 |\n| 담당 | 홍길동 |"
+    assert rows[1].content == "| 항목 | 값 |\n| 기간 | 3개월 |"
+    assert all(c.page == 1 and c.bbox is not None for c in rows)
+
+
+def test_pipe_table_single_data_row_does_not_split():
+    table = "| a | b |\n| --- | --- |\n| 1 | 2 |"
+    chunks = results_to_chunks([_item(item_type="table", markdown=table)])
+    assert len(chunks) == 1
+    assert chunks[0].type == "table"
+
+
+def test_html_table_emits_original_plus_row_chunks():
+    table = (
+        "<table>"
+        "<tr><th>항목</th><th>값</th></tr>"
+        "<tr><td>담당</td><td>홍길동</td></tr>"
+        "<tr><td>기간</td><td>3개월</td></tr>"
+        "</table>"
+    )
+    chunks = results_to_chunks([_item(item_type="table", markdown=table)])
+    assert len(chunks) == 3
+    assert chunks[0].type == "table"
+    assert chunks[0].content == table
+    rows = [c for c in chunks if c.type == "table_row"]
+    assert len(rows) == 2
+    assert "항목 | 값" in rows[0].content
+    assert "담당 | 홍길동" in rows[0].content
+    assert "기간 | 3개월" in rows[1].content
+
+
+def test_heading_prefixes_only_original_table_not_rows():
+    table = (
+        "| 항목 | 값 |\n"
+        "| --- | --- |\n"
+        "| 담당 | 홍길동 |\n"
+        "| 기간 | 3개월 |"
+    )
+    items = [
+        _item(item_type="paragraph_title", markdown="### 메타"),
+        _item(item_type="table", markdown=table),
+    ]
+    chunks = results_to_chunks(items)
+    assert chunks[0].type == "table"
+    assert chunks[0].content.startswith("### 메타")
+    for row in chunks[1:]:
+        assert row.type == "table_row"
+        assert not row.content.startswith("### 메타")
 
 
 def test_overflow_split_preserves_type_bbox():

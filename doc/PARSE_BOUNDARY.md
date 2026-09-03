@@ -57,4 +57,4 @@ documents.parse_json → results[] 단위 청킹 → BGE-M3 → Kiwi → Postgre
 ## 4. 관련
 
 - Parser Service docs: `http://192.168.14.248:17000/docs`
-- [`CHUNKING.md`](CHUNKING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- [`CHUNKING.md`](CHUNKING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`DOCUOPS_RAG_STRATEGY.md`](DOCUOPS_RAG_STRATEGY.md)
