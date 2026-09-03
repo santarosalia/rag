@@ -39,8 +39,8 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 | API | 입력 |
 |-----|------|
 | `POST /v1/documents` | Markdown 파일 |
-| `POST /v1/documents/parsed` | Markdown JSON |
-| `POST /v1/documents/parsed/file` | Markdown 파일 |
+| `POST /v1/documents` | 원본 → Parser Service → parse_json |
+| `POST /v1/documents/parse/file` | ParseResponse / ResultItem[] |
 
 외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다.  
 → 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md) (Superseded → Markdown-only)
@@ -59,7 +59,7 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastAPI (rag-api)                            │
-│  POST /v1/documents  POST /v1/documents/parsed[/file]                │
+│  POST /v1/documents  POST /v1/documents/parse/file                    │
 │  GET /v1/documents/{id}  DELETE                                      │
 │  POST /v1/retrieve   POST /v1/query                              │
 │  GET /health  GET /ready  GET /metrics                           │
@@ -123,8 +123,8 @@ Upload (UTF-8 Markdown) → S3 저장 → Celery Job
 | API | 입력 |
 |-----|------|
 | `POST /v1/documents` | Markdown 파일 |
-| `POST /v1/documents/parsed` | Markdown JSON |
-| `POST /v1/documents/parsed/file` | Markdown 파일 |
+| `POST /v1/documents` | 원본 → Parser Service → parse_json |
+| `POST /v1/documents/parse/file` | ParseResponse / ResultItem[] |
 
 ### 3.3 Chunking 전략
 
@@ -243,8 +243,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 | DELETE | `/v1/groups/{id}` | 빈 그룹만 삭제 | 없음 |
 | GET | `/v1/groups/{id}/documents` | 소속 문서 목록 | 없음 |
 | POST | `/v1/documents` | 문서 업로드 (`group_id` Form 필수) → ingest job | 없음 |
-| POST | `/v1/documents/parsed` | 파싱 Markdown JSON | 없음 |
-| POST | `/v1/documents/parsed/file` | 파싱 Markdown 파일 | 없음 |
+| POST | `/v1/documents/parse/file` | ParseResponse JSON | 없음 |
 | GET | `/v1/documents/{id}` | 문서/인덱싱 상태 조회 | 없음 |
 | DELETE | `/v1/documents/{id}` | 소프트 삭제 + 검색 필드 NULL | 없음 |
 | POST | `/v1/retrieve` | 검색만 (LLM 없음). `group_id` 선택 | 없음 |

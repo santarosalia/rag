@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for ingesting documents (source files via /documents, or Markdown via /parsed/file)."""
+"""CLI for ingesting documents (source via /documents, or ParseResponse JSON via /parse/file)."""
 
 import argparse
 import sys
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 
-_MD_SUFFIXES = {".md", ".markdown", ".txt"}
+_PARSE_SUFFIXES = {".json"}
 
 
 def main() -> None:
@@ -16,9 +16,9 @@ def main() -> None:
     parser.add_argument("--api-url", default="http://localhost:8000", help="RAG API base URL")
     parser.add_argument("--group-id", required=True, help="Destination group id")
     parser.add_argument(
-        "--markdown-only",
+        "--parse-json",
         action="store_true",
-        help="Skip parser; POST /v1/documents/parsed/file for .md/.txt only",
+        help="Skip parser; POST /v1/documents/parse/file for .json ParseResponse or ResultItem[]",
     )
     args = parser.parse_args()
 
@@ -29,14 +29,14 @@ def main() -> None:
 
     files = [path] if path.is_file() else list(path.rglob("*"))
     files = [f for f in files if f.is_file() and not f.name.startswith(".")]
-    if args.markdown_only:
-        files = [f for f in files if f.suffix.lower() in _MD_SUFFIXES]
+    if args.parse_json:
+        files = [f for f in files if f.suffix.lower() in _PARSE_SUFFIXES]
     if not files:
         print("No files found", file=sys.stderr)
         sys.exit(1)
 
     client = httpx.Client(base_url=args.api_url, timeout=600.0)
-    endpoint = "/v1/documents/parsed/file" if args.markdown_only else "/v1/documents"
+    endpoint = "/v1/documents/parse/file" if args.parse_json else "/v1/documents"
 
     for file_path in files:
         with file_path.open("rb") as f:

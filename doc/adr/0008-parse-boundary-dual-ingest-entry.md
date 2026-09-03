@@ -1,20 +1,22 @@
-# ADR-0008: 파싱 경계와 이중 인제스트 진입점
+# ADR 0008 — 파싱 경계 (Parser Service + ParseResponse)
 
-- **상태:** Superseded (Markdown-only ingest)
-- **날짜:** 2026-08-27
-- **관련:** [PARSE_BOUNDARY.md](../PARSE_BOUNDARY.md), ADR-0002, ADR-0005
+## Status
 
-## 맥락
+Accepted (supersedes Markdown-only dual ingest)
 
-적재(chunk → embed → Kiwi → PG)는 이 저장소에 두고, 원본 → Markdown 파싱만 분리하려 했다.
+## Context
 
-## 원래 결정 (폐기된 이중 경로)
+원본 파싱은 외부 Parser Service에 위임한다. 이 저장소는 적재·검색·생성만 담당한다.
 
-| 경로 | 입력 | 파싱 |
-|------|------|------|
-| A | 원본 `POST /v1/documents` | 이 저장소 MarkItDown |
-| B | Markdown `POST /v1/documents/parsed` | 외부 |
+## Decision
 
-## 현재 결정
+- `POST /v1/documents` — 원본 → Parser Service → `documents.parse_json` (JSONB) → Celery 청킹
+- `POST /v1/documents/parse/file` — ParseResponse JSON 또는 `ResultItem[]` 직적재
+- 청킹은 `results[]` 단위 (`parse_items.py`). Markdown SemanticChunker·S3 문서 저장·`/documents/parsed*` 없음
 
-**이 저장소는 파싱하지 않는다.** UTF-8 Markdown만 받는다 (`/documents`, `/documents/parsed`, `/documents/parsed/file`). MarkItDown·Docling·`parse_kind`는 제거됐다. 상세: [`PARSE_BOUNDARY.md`](../PARSE_BOUNDARY.md).
+상세: [`PARSE_BOUNDARY.md`](../PARSE_BOUNDARY.md) · [`CHUNKING.md`](../CHUNKING.md)
+
+## Consequences
+
+- citation에 `page`/`type`/`bbox`를 DB에 보관 가능
+- 기존 Markdown 직적재 클라이언트는 `/documents/parse/file`로 마이그레이션 필요

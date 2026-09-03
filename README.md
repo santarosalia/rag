@@ -14,8 +14,8 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 | **Rerank** | Cross-encoder `bge-reranker-v2-m3` (top-50 → top-5) |
 | **Citation** | chunk_id, filename, page. `/v1/query`·`/v1/retrieve` body `snippet`/`content`(bool)로 본문 필드 선택. 기본 snippet만 |
 | **Groups** | 평면 문서 그룹. 생성 시 외부 문자열 ID 지정 가능 |
-| **Async Ingest** | `POST /v1/documents` → Parser Service → Markdown chunk/embed. `/parsed`는 Markdown 직적재 |
-| **Single DB** | 메타데이터 + 벡터 + FTS 모두 PostgreSQL |
+| **Async Ingest** | `POST /v1/documents` → Parser Service → `parse_json` → results 단위 chunk/embed |
+| **Single DB** | 메타데이터 + ParseResponse + 벡터 + FTS 모두 PostgreSQL |
 | **Observability** | Prometheus, structlog, OpenTelemetry |
 
 ---
@@ -23,7 +23,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 ## 아키텍처
 
 ```
-Source Upload → Parser Service (/parse) → Markdown → Chunker → Embedding + Kiwi → PostgreSQL
+Source Upload → Parser Service (/parse) → ParseResponse → results chunk → Embedding + Kiwi → PostgreSQL
                                                                               ↓
 Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citations
 ```
@@ -33,7 +33,7 @@ Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citatio
 | API | FastAPI + Uvicorn |
 | Queue | Celery + Redis |
 | Search | PostgreSQL pgvector + FTS (Kiwi) |
-| Object Storage | MinIO / S3 |
+| Document store | PostgreSQL JSONB (`documents.parse_json`) |
 | Embedding | BAAI/bge-m3 |
 | Reranker | BAAI/bge-reranker-v2-m3 |
 | LLM | OpenAI-compatible API |
@@ -56,19 +56,14 @@ curl -X POST http://localhost:8000/v1/groups \
   -H "Content-Type: application/json" \
   -d '{"id": "ga"}'
 
-# 원본 업로드 (Parser Service → Markdown → 적재)
+# 원본 업로드 (Parser Service → ParseResponse → 적재)
 curl -X POST http://localhost:8000/v1/documents \
   -F "file=@document.pdf" \
   -F "group_id=ga"
 
-# Markdown JSON (파서 스킵)
-curl -X POST http://localhost:8000/v1/documents/parsed \
-  -H "Content-Type: application/json" \
-  -d '{"group_id": "ga", "filename": "document.pdf", "markdown": "# 제목\n\n본문"}'
-
-# Markdown 파일 (파서 스킵)
-curl -X POST http://localhost:8000/v1/documents/parsed/file \
-  -F "file=@document.md" \
+# ParseResponse / ResultItem[] JSON (파서 스킵)
+curl -X POST http://localhost:8000/v1/documents/parse/file \
+  -F "file=@document.json" \
   -F "group_id=ga"
 
 # 검색 (group_id 생략 시 전체)
@@ -93,9 +88,8 @@ curl -X POST http://localhost:8000/v1/query \
 | `GET /v1/groups/{id}` | 단건 |
 | `DELETE /v1/groups/{id}` | 빈 그룹만 삭제 |
 | `GET /v1/groups/{id}/documents` | 소속 문서 |
-| `POST /v1/documents` | 원본 파일 → Parser Service → Markdown 적재 (`parse` 필드에 ParseResponse) |
-| `POST /v1/documents/parsed` | Markdown JSON 직적재 |
-| `POST /v1/documents/parsed/file` | Markdown 파일 직적재 |
+| `POST /v1/documents` | 원본 파일 → Parser Service → parse_json 적재 (`parse` 필드에 ParseResponse) |
+| `POST /v1/documents/parse/file` | ParseResponse JSON 또는 ResultItem[] 직적재 |
 | `GET /v1/documents/{id}` | 인덱싱 상태 (`group_id`) |
 | `POST /v1/retrieve` | hybrid/dense/sparse 검색 |
 | `POST /v1/query` | 검색 + LLM 답변 |

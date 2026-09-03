@@ -112,7 +112,6 @@ def ingest_document_task(self, doc_id: str, job_id: str) -> dict:
 @celery_app.task(bind=True, name="rag.delete_document", max_retries=3)
 def delete_document_task(self, doc_id: str) -> dict:
     from rag.indexing.factory import get_search_backend
-    from rag.storage.s3 import ObjectStorage
 
     async def _delete():
         from rag.db.session import worker_session
@@ -132,8 +131,6 @@ def delete_document_task(self, doc_id: str) -> dict:
             return {"doc_id": doc_id, "status": "not_found"}
 
         run_async(_delete())
-        storage = ObjectStorage()
-        storage.delete(document.s3_key)
         document.status = DocumentStatus.DELETED
         document.deleted_at = datetime.now(UTC)
         session.commit()

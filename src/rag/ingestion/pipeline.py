@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,20 +9,13 @@ from rag.config import get_settings
 from rag.db.models import Chunk, Document, DocumentStatus, Group, IngestJob, JobStatus
 from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
-from rag.ingestion.chunker import SemanticChunker
+from rag.ingestion.parse_items import load_parse_response, parse_response_to_chunks
+from rag.models.parse import ParseResponse
 from rag.observability.logging import get_logger
 from rag.observability.metrics import INGEST_COUNTER
 from rag.retrieval.embeddings import get_embedding_service
-from rag.storage.s3 import ObjectStorage
 
 logger = get_logger(__name__)
-
-
-def decode_markdown(data: bytes) -> str:
-    text = data.decode("utf-8-sig", errors="replace").strip()
-    if not text:
-        raise ValueError("No content extracted from document")
-    return text
 
 
 class IngestionPipeline:
@@ -30,13 +24,8 @@ class IngestionPipeline:
         chunk_cfg = config.get("chunking", {})
         ingest_cfg = config.get("ingestion", {})
 
-        self.chunker = SemanticChunker(
-            max_tokens=chunk_cfg.get("max_tokens", 768),
-            overlap_tokens=chunk_cfg.get("overlap_tokens", 128),
-            min_chunk_tokens=chunk_cfg.get("min_chunk_tokens", 64),
-        )
+        self.max_tokens = chunk_cfg.get("max_tokens", 768)
         self.batch_size = ingest_cfg.get("bulk_batch_size", 100)
-        self.storage = ObjectStorage()
         self.embedding_service = get_embedding_service()
         self.search_backend = get_search_backend()
 
@@ -61,9 +50,8 @@ class IngestionPipeline:
         await session.flush()
 
         try:
-            data = self.storage.download(document.s3_key)
-            markdown = decode_markdown(data)
-            all_text_chunks = self.chunker.chunk(markdown)
+            parse = load_parse_response(document.parse_json)
+            all_text_chunks = parse_response_to_chunks(parse, max_tokens=self.max_tokens)
 
             await session.execute(delete(Chunk).where(Chunk.doc_id == document.id))
             await session.flush()
@@ -88,6 +76,8 @@ class IngestionPipeline:
                     content=text_chunk.content,
                     token_count=text_chunk.token_count,
                     page=text_chunk.page,
+                    type=text_chunk.type,
+                    bbox=text_chunk.bbox,
                 )
                 db_chunks.append(db_chunk)
 
@@ -145,13 +135,18 @@ async def create_document_record(
     *,
     filename: str,
     content_type: str,
-    s3_key: str,
+    parse: ParseResponse | dict[str, Any],
     group_id: str,
 ) -> tuple[Document, IngestJob]:
+    if isinstance(parse, ParseResponse):
+        parse_json = parse.model_dump(mode="json")
+    else:
+        parse_json = parse
+
     document = Document(
         filename=filename,
         content_type=content_type,
-        s3_key=s3_key,
+        parse_json=parse_json,
         group_id=group_id,
         status=DocumentStatus.PENDING,
     )

@@ -18,13 +18,6 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
-    s3_endpoint: str = "http://localhost:9000"
-    s3_access_key: str = "minioadmin"
-    s3_secret_key: str = "minioadmin"
-    s3_bucket: str = "rag-documents"
-    s3_region: str = "us-east-1"
-    s3_use_ssl: bool = False
-
     llm_api_key: str = ""
     llm_base_url: str = "https://api.openai.com/v1"
 

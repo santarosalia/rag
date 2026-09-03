@@ -34,6 +34,8 @@ class TextChunk:
     chunk_index: int
     page: int | None = None
     token_count: int = 0
+    type: str | None = None
+    bbox: dict | None = None
 
 
 class SemanticChunker:

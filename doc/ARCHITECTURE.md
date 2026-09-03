@@ -17,16 +17,15 @@ flowchart TB
   end
 
   subgraph ingest [Ingestion]
-    Upload[Markdown Upload]
-    Chunker[Semantic Chunker]
+    Upload[ParseResponse Upload]
+    Chunker[results_to_chunks]
     EmbedWorker[Embedding BGE-M3]
     MorphWorker[Kiwi Morphology]
     CeleryWorker[Celery Worker]
   end
 
   subgraph storage [Storage]
-    S3[MinIO / S3]
-    PG[(PostgreSQL pgvector + FTS)]
+    PG[(PostgreSQL parse_json + pgvector + FTS)]
     Redis[(Redis)]
   end
 
@@ -40,7 +39,6 @@ flowchart TB
 
   App --> Auth --> RateLimit --> FastAPI
   FastAPI --> Upload
-  Upload --> S3
   Upload --> CeleryWorker
   CeleryWorker --> Chunker --> EmbedWorker
   EmbedWorker --> MorphWorker --> PG
@@ -61,10 +59,10 @@ flowchart TB
 ### 인덱싱
 
 1. Client → `POST /v1/documents` (multipart file + **필수** `group_id`)
-2. API → S3 upload + PostgreSQL document record (status: pending)
+2. API → Parser Service → `documents.parse_json` 저장 (status: pending)
 3. API → Celery `ingest_document` task enqueue
-4. Worker → parse → chunk → embed (BGE-M3) → Kiwi morph
-5. Worker → `chunks` 행에 `embedding`, `content_morph`, `tsv` 갱신
+4. Worker → `results[]` chunk → embed (BGE-M3) → Kiwi morph
+5. Worker → `chunks` 행에 `embedding`, `content_morph`, `tsv`, `type`, `bbox` 갱신
 6. Worker → PostgreSQL status: completed, chunk_count 갱신
 
 ### 질의
@@ -108,6 +106,8 @@ WHERE id = :chunk_id;
 | `content` | text | 원문 (LLM 컨텍스트 전문, API snippet은 미리보기) |
 | `content_morph` | text | Kiwi 형태소 분석 결과 |
 | `embedding` | vector(1024) | Dense kNN (cosine, HNSW) |
+| `type` | varchar(64) | ResultItem type |
+| `bbox` | jsonb | prov[0].bbox |
 | `tsv` | tsvector | Sparse FTS (`plainto_tsquery('simple', …)`) |
 
 삭제 시 soft-delete: `embedding`, `content_morph`, `tsv`를 NULL로 초기화.
@@ -125,8 +125,10 @@ src/rag/
 │   ├── filter.py     # retrieve SQL 필터
 │   └── service.py    # CRUD, 삭제 정책
 ├── ingestion/
-│   ├── chunker.py    # SemanticChunker (헤딩·표)
-│   └── pipeline.py   # IngestionPipeline (UTF-8 Markdown)
+│   ├── chunker.py       # TextChunk (+ legacy SemanticChunker)
+│   ├── parse_items.py   # ParseResponse.results → TextChunk
+│   ├── parser_client.py
+│   └── pipeline.py      # IngestionPipeline (parse_json)
 ├── retrieval/
 │   ├── embeddings.py # BGE-M3, reranker, cache
 │   ├── fusion.py     # RRF
@@ -143,8 +145,6 @@ src/rag/
 ├── db/
 │   ├── models.py     # Group, Document, Chunk, IngestJob
 │   └── session.py
-├── storage/
-│   └── s3.py
 ├── observability/
 │   ├── logging.py
 │   ├── metrics.py
@@ -159,12 +159,12 @@ src/rag/
 ```mermaid
 flowchart LR
   subgraph entry [진입점]
-    A[POST /v1/documents Markdown]
-    B[POST /v1/documents/parsed]
+    A[POST /v1/documents]
+    B[POST /v1/documents/parse/file]
   end
 
   subgraph load [적재 - 이 저장소]
-    Chunk[Chunk + Embed + Kiwi]
+    Chunk[ParseResponse results chunk + Embed + Kiwi]
   end
 
   subgraph rag_svc [검색]
@@ -172,17 +172,17 @@ flowchart LR
     Query[POST /v1/query]
   end
 
-  PG[(PostgreSQL documents + chunks)]
+  PG[(PostgreSQL parse_json + chunks)]
   Ext[외부 파서]
 
-  Ext -->|Markdown| A --> Chunk
-  Ext -->|Markdown| B --> Chunk
+  Ext -->|ParseResponse| A --> Chunk
+  B -->|ParseResponse JSON| Chunk
   Chunk --> PG
   Retrieve --> PG
   Query --> Retrieve
 ```
 
-- 이 저장소는 PDF/Office 파싱 없음. UTF-8 Markdown만 수신
+- 이 저장소는 PDF/Office 파싱 없음. Parser Service 또는 parse JSON만 수신
 - 검색: `chunks` JOIN `documents` (`filename`, `page`, `group_id`)
 
 계약: [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md)
