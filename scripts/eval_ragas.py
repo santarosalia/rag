@@ -439,7 +439,7 @@ def run_ragas(
     judge_cfg: dict[str, Any],
     embeddings_cfg: dict[str, Any],
     *,
-    batch_size: int = 1,
+    batch_size: int = 10,
     item_ids: list[str] | None = None,
 ) -> tuple[dict[str, float], dict[str, Any]]:
     from ragas import EvaluationDataset, evaluate
@@ -557,8 +557,8 @@ def main() -> None:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=1,
-        help="RAGAS judge batch size (default: 1 for visible per-item progress)",
+        default=10,
+        help="RAGAS judge batch size (default: 10)",
     )
     args = parser.parse_args()
     load_dotenv_file()
