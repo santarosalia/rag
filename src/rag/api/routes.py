@@ -101,7 +101,6 @@ async def upload_document(
             raw,
             filename=citation_name,
             content_type=file.content_type,
-            output_format="markdown",
         )
     except ParserError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

@@ -34,10 +34,10 @@ class ParserClient:
         *,
         filename: str,
         content_type: str | None = None,
-        output_format: str = "markdown",
+        output_format: str | None = None,
     ) -> ParseResponse:
         url = f"{self.base_url}/parse"
-        params = {"output_format": output_format}
+        params = {"output_format": output_format} if output_format else None
         files = {
             "file": (
                 filename,

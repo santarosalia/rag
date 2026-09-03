@@ -32,12 +32,12 @@ async def test_parser_client_success(monkeypatch):
 
         async def post(self, url, params=None, files=None):
             assert url.endswith("/parse")
-            assert params == {"output_format": "markdown"}
+            assert params is None
             return FakeResponse()
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
     parsed = await ParserClient(base_url="http://parser.test").parse(
-        b"%PDF", filename="a.pdf", output_format="markdown"
+        b"%PDF", filename="a.pdf"
     )
     assert isinstance(parsed, ParseResponse)
     assert parsed.status == "SUCCESS"

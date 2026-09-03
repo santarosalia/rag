@@ -12,7 +12,7 @@
 원본 PDF/Office
     │
     ▼
-POST /v1/documents  ──►  Parser Service POST /parse?output_format=markdown
+POST /v1/documents  ──►  Parser Service POST /parse (서비스 기본 output_format)
     │                         │
     │                         ▼ ParseResponse
     ▼
