@@ -36,6 +36,10 @@ class TextChunk:
     token_count: int = 0
     type: str | None = None
     bbox: dict | None = None
+    # False → DB에는 두지만 dense/FTS 인덱스 제외 (표 원본 등)
+    searchable: bool = True
+    # table_row → 부모 table의 chunk_index (컨텍스트 expand용)
+    parent_chunk_index: int | None = None
 
 
 class SemanticChunker:

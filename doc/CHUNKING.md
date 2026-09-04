@@ -24,7 +24,7 @@
 
 | 규칙 | 동작 |
 |------|------|
-| 단위 | 1 embeddable item → 1+ chunk (표는 원본 + 행) |
+| 단위 | 1 item → 1+ chunk (표는 원본 + 행; **검색은 행만**) |
 | 스킵 | `number`, `header`, `footer`, 빈 markdown |
 | 제목 | `doc_title` / `paragraph_title` / `section_header` → 단독 임베딩 금지, 다음 본문(또는 **원본 표**) prefix |
 | page | `prov[0].page_no` → `chunks.page` |
@@ -39,12 +39,14 @@
 `type`이 `table`/`table_text` 이거나 파이프·`<table>` 본문일 때:
 
 1. **HTML이면** `prepare_table_content`로 파이프 Markdown 변환 (rowspan/colspan 격자 전개, style 제거)
-2. **원본 표** 청크 1개 유지 (`type=table`, heading prefix는 여기에만) — 내용은 정규화된 MD
+2. **원본 표** 청크 1개 유지 (`type=table`, heading prefix는 여기에만) — DB에는 저장
 3. 데이터 행 ≥ 2이면 행마다 `type=table_row` 추가 (`헤더줄\n데이터줄`, `|---|` 제외)
-4. 행 1개 이하면 split 없음 (원본만)
-5. 행 청크의 `page`/`bbox`는 부모 표와 동일
+4. **검색:** row-split된 원본 `table`은 embedding/FTS **미적재** (`searchable=false`). 행만 검색
+5. **컨텍스트:** `table_row` hit → 부모 표 content로 expand + 같은 부모 dedupe ([`table_expand.py`](../src/rag/retrieval/table_expand.py))
+6. 행 1개 이하면 split 없음 (원본만 검색)
+7. 행 청크의 `page`/`bbox`는 부모 표와 동일
 
-재 ingest + **worker 재배포** 후에야 검색에 반영된다.
+재 ingest + **worker/API 재배포** 후에야 검색에 반영된다.
 
 ---
 

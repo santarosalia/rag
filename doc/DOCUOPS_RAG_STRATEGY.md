@@ -300,7 +300,7 @@ flowchart TD
 
 | # | 항목 | DocuOps 원본 | `rag`에서 할 일 | 손대는 곳 |
 |---|------|--------------|-----------------|-----------|
-| **A** | 표 **row-split** (+ 원본 유지) + HTML→MD | `_split_table_rows` + `prepare_table_content` | **구현됨** — HTML은 rowspan/colspan 전개 후 파이프 MD로 정규화한 뒤 원본+행 청크. 재배포·재 ingest 필요 | [`table_markdown.py`](../src/rag/ingestion/table_markdown.py), [`parse_items.py`](../src/rag/ingestion/parse_items.py), [`CHUNKING.md`](CHUNKING.md) |
+| **A** | 표 **row-split** + HTML→MD + **원본 비검색** | `_split_table_rows` + `prepare_table_content` | **구현됨** — 원본은 DB만(검색 제외), 행만 임베딩. retrieve 시 row→부모 표 expand·dedupe. 재배포·재 ingest 필요 | [`table_markdown.py`](../src/rag/ingestion/table_markdown.py), [`parse_items.py`](../src/rag/ingestion/parse_items.py), [`table_expand.py`](../src/rag/retrieval/table_expand.py), [`CHUNKING.md`](CHUNKING.md) |
 | **B** | 검색 **dense-first** | 기본 `fusion_method=dense` | (1) `/v1/query`·기본 retrieve 모드를 **dense**로 (또는 hybrid를 옵션으로만). (2) dense **score threshold** (예: 0.3, YAML). (3) `rerank_top_n`을 **5→10** 근처로. (4) 선택: 생성 답이 거절류면 **hybrid 1회 재시도** | [`configs/default.yaml`](../configs/default.yaml), [`retrieval/pipeline.py`](../src/rag/retrieval/pipeline.py), [`generation/service.py`](../src/rag/generation/service.py), [`pgvector_backend.py`](../src/rag/indexing/pgvector_backend.py) |
 
 재적재: **A**는 문서 재 ingest 필요. **B**는 설정·코드만으로 바로 측정 가능.

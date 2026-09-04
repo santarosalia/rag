@@ -210,6 +210,8 @@ def _append_chunk(
     bbox: dict[str, Any] | None,
     encoding: tiktoken.Encoding,
     max_tokens: int,
+    searchable: bool = True,
+    parent_chunk_index: int | None = None,
 ) -> int:
     """Append one or more chunks; return next chunk_index."""
     token_count = len(encoding.encode(content))
@@ -222,6 +224,8 @@ def _append_chunk(
                 token_count=token_count,
                 type=item_type,
                 bbox=bbox,
+                searchable=searchable,
+                parent_chunk_index=parent_chunk_index,
             )
         )
         return chunk_index + 1
@@ -239,6 +243,8 @@ def _append_chunk(
                 token_count=len(encoding.encode(part)),
                 type=item_type,
                 bbox=bbox,
+                searchable=searchable,
+                parent_chunk_index=parent_chunk_index,
             )
         )
         next_index += 1
@@ -285,6 +291,9 @@ def results_to_chunks(
             md = prepare_table_content(md)
             original = f"{pending_heading}\n\n{md}" if pending_heading else md
             pending_heading = None
+            row_bodies = _split_table_rows(md)
+            parent_index = chunk_index
+            # Row-split 시 원본은 컨텍스트 expand 전용(검색 제외)
             chunk_index = _append_chunk(
                 chunks,
                 content=original,
@@ -294,8 +303,9 @@ def results_to_chunks(
                 bbox=bbox,
                 encoding=encoding,
                 max_tokens=max_tokens,
+                searchable=not row_bodies,
             )
-            for row_body in _split_table_rows(md):
+            for row_body in row_bodies:
                 chunk_index = _append_chunk(
                     chunks,
                     content=row_body,
@@ -305,6 +315,8 @@ def results_to_chunks(
                     bbox=bbox,
                     encoding=encoding,
                     max_tokens=max_tokens,
+                    searchable=True,
+                    parent_chunk_index=parent_index,
                 )
             continue
 

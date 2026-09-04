@@ -59,13 +59,20 @@ class IngestionPipeline:
             if not all_text_chunks:
                 raise ValueError("No content extracted from document")
 
-            texts = [c.content for c in all_text_chunks]
-            embeddings = self.embedding_service.embed_texts(texts)
+            searchable_chunks = [c for c in all_text_chunks if c.searchable]
+            texts = [c.content for c in searchable_chunks]
+            embeddings = (
+                self.embedding_service.embed_texts(texts) if texts else []
+            )
+            embed_by_index = {
+                c.chunk_index: emb
+                for c, emb in zip(searchable_chunks, embeddings, strict=True)
+            }
 
             db_chunks: list[Chunk] = []
             index_docs = []
 
-            for text_chunk, embedding in zip(all_text_chunks, embeddings, strict=True):
+            for text_chunk in all_text_chunks:
                 chunk_id = uuid.uuid4()
 
                 db_chunk = Chunk(
@@ -80,6 +87,10 @@ class IngestionPipeline:
                     bbox=text_chunk.bbox,
                 )
                 db_chunks.append(db_chunk)
+
+                embedding = embed_by_index.get(text_chunk.chunk_index)
+                if embedding is None:
+                    continue
 
                 index_docs.append(
                     build_index_document(
