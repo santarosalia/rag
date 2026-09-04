@@ -128,9 +128,7 @@ Upload (UTF-8 Markdown) → S3 저장 → Celery Job
 
 ### 3.3 Chunking 전략
 
-Markdown ATX 헤딩(`#`–`######`)·파이프 표·코드 펜스·HTML 표 경계를 우선하는 Semantic Chunker (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
-`min_chunk_tokens` 미만 본문은 버리지 않고 이전 청크에 붙인다. 상세: [`CHUNKING.md`](CHUNKING.md).  
-다음: 검색=child / 생성=parent, 거대 표만 행 그룹 — [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md).
+`ParseResponse.results` 레이아웃 item 단위 (`max_tokens` 768). 표는 원본+`table_row` + `parent_chunk_id` expand. 상세: [`CHUNKING.md`](CHUNKING.md).
 
 ### 3.4 메타데이터 스키마
 

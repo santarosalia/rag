@@ -127,7 +127,7 @@ src/rag/
 │   ├── filter.py     # retrieve SQL 필터
 │   └── service.py    # CRUD, 삭제 정책
 ├── ingestion/
-│   ├── chunker.py         # TextChunk (+ legacy SemanticChunker)
+│   ├── chunker.py         # TextChunk
 │   ├── parse_items.py     # ParseResponse.results → TextChunk
 │   ├── table_markdown.py  # HTML table → pipe MD
 │   ├── parser_client.py

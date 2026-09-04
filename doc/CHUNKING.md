@@ -11,10 +11,8 @@
 
 ## 0. 한 줄 요약
 
-Markdown 전체 SemanticChunker 재분할 **없음**. Parser가 준 **레이아웃 item 1개 ≈ 청크 1개**(제목은 prefix, 표는 원본+행).  
+Markdown 전체 재분할 없음. Parser가 준 **레이아웃 item 1개 ≈ 청크 1개**(제목은 prefix, 표는 원본+행).  
 표만 DocuOps식 **row-split**: 원본은 DB만, 검색은 `table_row`, 질의 후 `parent_chunk_id`로 부모 표 content expand.
-
-`SemanticChunker`([`chunker.py`](../src/rag/ingestion/chunker.py))는 레거시. 현 ingest 경로는 쓰지 않는다.
 
 ---
 
@@ -120,7 +118,7 @@ Retrieve 순서 ([`retrieval/pipeline.py`](../src/rag/retrieval/pipeline.py)):
 |------|------|
 | `ingestion/parse_items.py` | item 규칙, 표 split, `TextChunk` 생성 |
 | `ingestion/table_markdown.py` | HTML → 파이프 MD |
-| `ingestion/chunker.py` | `TextChunk` dataclass (+ 미사용 `SemanticChunker`) |
+| `ingestion/chunker.py` | `TextChunk` dataclass |
 | `ingestion/pipeline.py` | parse → DB + searchable embed, `parent_chunk_id` 매핑 |
 | `db/models.py` / alembic `011` | `chunks.parent_chunk_id` |
 | `retrieval/table_expand.py` | row hit → 부모 표 expand · dedupe |
