@@ -61,8 +61,8 @@ flowchart TB
 1. Client → `POST /v1/documents` (multipart file + **필수** `group_id`)
 2. API → Parser Service → `documents.parse_json` 저장 (status: pending)
 3. API → Celery `ingest_document` task enqueue
-4. Worker → `results[]` chunk → embed (BGE-M3) → Kiwi morph
-5. Worker → `chunks` 행에 `embedding`, `content_morph`, `tsv`, `type`, `bbox` 갱신
+4. Worker → `results[]` → [`CHUNKING.md`](CHUNKING.md) 규칙으로 청크 (표는 원본+`table_row`)
+5. Worker → 전 청크 INSERT (`parent_chunk_id` 포함); **searchable**만 embed (BGE-M3) + Kiwi → `embedding`/`content_morph`/`tsv`
 6. Worker → PostgreSQL status: completed, chunk_count 갱신
 
 ### 질의
@@ -71,8 +71,9 @@ flowchart TB
 2. API → query embedding (Redis cache check)
 3. Parallel: pgvector kNN + FTS (`ts_rank` on `tsv`, Kiwi morph query)
 4. RRF fuse → Cross-encoder rerank top-5
-5. Build context (청크 전문, tiktoken 4096 예산, 마지막만 자름) → LLM generate
-6. Response: answer + citations[] + latency_ms (`backend: "pgvector"`)
+5. `table_row` hit → `parent_chunk_id`로 부모 표 content expand · 부모 dedupe
+6. Build context (청크 전문, tiktoken 4096 예산, 마지막만 자름) → LLM generate
+7. Response: answer + citations[] + latency_ms (`backend: "pgvector"`)
 
 ## PostgreSQL `chunks` 스키마
 
@@ -106,8 +107,9 @@ WHERE id = :chunk_id;
 | `content` | text | 원문 (LLM 컨텍스트 전문, API snippet은 미리보기) |
 | `content_morph` | text | Kiwi 형태소 분석 결과 |
 | `embedding` | vector(1024) | Dense kNN (cosine, HNSW) |
-| `type` | varchar(64) | ResultItem type |
+| `type` | varchar(64) | ResultItem type (`table_row` 등) |
 | `bbox` | jsonb | prov[0].bbox |
+| `parent_chunk_id` | uuid FK → chunks.id | `table_row` → 부모 표 (nullable) |
 | `tsv` | tsvector | Sparse FTS (`plainto_tsquery('simple', …)`) |
 
 삭제 시 soft-delete: `embedding`, `content_morph`, `tsv`를 NULL로 초기화.
@@ -125,14 +127,16 @@ src/rag/
 │   ├── filter.py     # retrieve SQL 필터
 │   └── service.py    # CRUD, 삭제 정책
 ├── ingestion/
-│   ├── chunker.py       # TextChunk (+ legacy SemanticChunker)
-│   ├── parse_items.py   # ParseResponse.results → TextChunk
+│   ├── chunker.py         # TextChunk (+ legacy SemanticChunker)
+│   ├── parse_items.py     # ParseResponse.results → TextChunk
+│   ├── table_markdown.py  # HTML table → pipe MD
 │   ├── parser_client.py
-│   └── pipeline.py      # IngestionPipeline (parse_json)
+│   └── pipeline.py        # IngestionPipeline (parse_json)
 ├── retrieval/
-│   ├── embeddings.py # BGE-M3, reranker, cache
-│   ├── fusion.py     # RRF
-│   └── pipeline.py   # RetrievalPipeline
+│   ├── embeddings.py   # BGE-M3, reranker, cache
+│   ├── fusion.py       # RRF
+│   ├── table_expand.py # table_row → parent table context
+│   └── pipeline.py     # RetrievalPipeline
 ├── generation/
 │   ├── llm.py        # OpenAI-compatible client
 │   └── service.py    # QueryService
