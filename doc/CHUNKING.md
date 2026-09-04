@@ -34,18 +34,17 @@
 
 본문 예: `text`, `table`, `table_row`, `header_image`, `vision_footnote` 등.
 
-### 2.1 표 row-split (DocuOps MVP A)
+### 2.1 표 정규화 + row-split (DocuOps MVP A)
 
 `type`이 `table`/`table_text` 이거나 파이프·`<table>` 본문일 때:
 
-1. **원본 표** 청크 1개 유지 (`type=table`, heading prefix는 여기에만)
-2. 데이터 행 ≥ 2이면 행마다 `type=table_row` 추가  
-   - 파이프 MD: content = `헤더줄\n데이터줄` (`|---|` 구분 줄 제외)  
-   - HTML: outer `<tr>` → 셀 텍스트를 ` | `로 이어 `헤더\n행`  
-3. 행 1개 이하면 split 없음 (원본만)
-4. 행 청크의 `page`/`bbox`는 부모 표와 동일
+1. **HTML이면** `prepare_table_content`로 파이프 Markdown 변환 (rowspan/colspan 격자 전개, style 제거)
+2. **원본 표** 청크 1개 유지 (`type=table`, heading prefix는 여기에만) — 내용은 정규화된 MD
+3. 데이터 행 ≥ 2이면 행마다 `type=table_row` 추가 (`헤더줄\n데이터줄`, `|---|` 제외)
+4. 행 1개 이하면 split 없음 (원본만)
+5. 행 청크의 `page`/`bbox`는 부모 표와 동일
 
-재 ingest 후에야 검색에 반영된다.
+재 ingest + **worker 재배포** 후에야 검색에 반영된다.
 
 ---
 

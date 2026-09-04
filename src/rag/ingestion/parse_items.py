@@ -9,6 +9,7 @@ from typing import Any
 import tiktoken
 
 from rag.ingestion.chunker import TextChunk
+from rag.ingestion.table_markdown import prepare_table_content
 from rag.models.parse import ParseResponse, ResultItem
 
 HEADING_TYPES = frozenset({"doc_title", "paragraph_title", "section_header"})
@@ -281,6 +282,7 @@ def results_to_chunks(
         item_type = item.type
 
         if _is_table_item(item_type, md):
+            md = prepare_table_content(md)
             original = f"{pending_heading}\n\n{md}" if pending_heading else md
             pending_heading = None
             chunk_index = _append_chunk(

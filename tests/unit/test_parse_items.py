@@ -64,7 +64,7 @@ def test_skips_number_header_footer():
 
 
 def test_table_stays_in_one_chunk_with_heading_prefix():
-    # Single data row → no row-split; original table only.
+    # Single data row → no row-split; original table only (HTML→MD).
     table = "<table><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td></tr></table>"
     items = [
         _item(item_type="paragraph_title", markdown="### 표"),
@@ -73,7 +73,8 @@ def test_table_stays_in_one_chunk_with_heading_prefix():
     chunks = results_to_chunks(items, max_tokens=512)
     assert len(chunks) == 1
     assert "### 표" in chunks[0].content
-    assert table in chunks[0].content
+    assert "| a | b |" in chunks[0].content
+    assert "<table" not in chunks[0].content
     assert chunks[0].type == "table"
     assert chunks[0].page == 1
     assert chunks[0].bbox is not None
@@ -117,12 +118,32 @@ def test_html_table_emits_original_plus_row_chunks():
     chunks = results_to_chunks([_item(item_type="table", markdown=table)])
     assert len(chunks) == 3
     assert chunks[0].type == "table"
-    assert chunks[0].content == table
+    assert chunks[0].content.startswith("|")
+    assert "<table" not in chunks[0].content
     rows = [c for c in chunks if c.type == "table_row"]
     assert len(rows) == 2
-    assert "항목 | 값" in rows[0].content
-    assert "담당 | 홍길동" in rows[0].content
-    assert "기간 | 3개월" in rows[1].content
+    assert rows[0].content == "| 항목 | 값 |\n| 담당 | 홍길동 |"
+    assert rows[1].content == "| 항목 | 값 |\n| 기간 | 3개월 |"
+
+
+def test_rowspan_html_table_fills_cells_and_splits_rows():
+    table = (
+        "<table>"
+        "<tr><td>구분</td><td>소속</td><td>성명</td></tr>"
+        '<tr><td rowspan="3">내부</td><td>인사팀</td><td>박정수</td></tr>'
+        "<tr><td>BIZ혁신팀</td><td>오명진</td></tr>"
+        "<tr><td>영업정책팀</td><td>박세진</td></tr>"
+        '<tr><td rowspan="2">외부</td><td>자활원</td><td>박수민</td></tr>'
+        "<tr><td>무역보험</td><td>이승율</td></tr>"
+        "</table>"
+    )
+    chunks = results_to_chunks([_item(item_type="table", markdown=table)])
+    assert chunks[0].type == "table"
+    assert "<td" not in chunks[0].content
+    rows = [c for c in chunks if c.type == "table_row"]
+    assert len(rows) == 5
+    assert "내부" in rows[1].content and "오명진" in rows[1].content
+    assert "외부" in rows[4].content and "이승율" in rows[4].content
 
 
 def test_heading_prefixes_only_original_table_not_rows():
