@@ -41,6 +41,7 @@ def test_query_citation_body_defaults():
     req = QueryRequest(query="hello")
     assert req.snippet is True
     assert req.content is False
+    assert req.include_glossary_definitions is False
 
 
 def test_project_citation_bodies_omits_unrequested_fields():

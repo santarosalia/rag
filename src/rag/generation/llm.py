@@ -27,15 +27,28 @@ def _truncate_tokens(text: str, max_tokens: int) -> str:
     return enc.decode(ids[:max_tokens])
 
 
-def build_context(citations: list[Citation], max_tokens: int = 4096) -> str:
+def build_context(
+    citations: list[Citation],
+    max_tokens: int = 4096,
+    *,
+    glossary_text: str | None = None,
+) -> str:
     """Numbered context from full chunk text, truncated to a token budget.
 
     API ``snippet`` is a 300-char preview. Generation uses ``content`` when set.
     Request flags ``snippet`` / ``content`` choose which fields appear in JSON.
+    Optional ``glossary_text`` is prepended (matched term definitions).
     Rank order is kept; the last included chunk may be cut mid-text.
     """
     parts: list[str] = []
     used = 0
+
+    if glossary_text and glossary_text.strip():
+        gloss = glossary_text.strip() + "\n"
+        gloss_tokens = _count_tokens(gloss)
+        if gloss_tokens < max_tokens:
+            parts.append(gloss)
+            used += gloss_tokens
 
     for citation in citations:
         body = citation.content or citation.snippet

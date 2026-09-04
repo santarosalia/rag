@@ -110,6 +110,7 @@ class QueryRequest(BaseModel):
     include_citations: bool = True
     snippet: bool = True
     content: bool = False
+    include_glossary_definitions: bool = False
 
 
 class QueryResponse(BaseModel):

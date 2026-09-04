@@ -231,6 +231,7 @@ async def query(
             query=request.query,
             group_id=group_id,
             top_k=request.top_k,
+            include_glossary_definitions=request.include_glossary_definitions,
         )
         QUERY_COUNTER.labels(endpoint="query", status="success").inc()
         citations = (

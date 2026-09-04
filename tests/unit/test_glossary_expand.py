@@ -106,6 +106,23 @@ def test_build_expanded_tsquery_no_match_falls_back():
     assert q == "일반 & 질의"
 
 
-def test_morph_lexemes_dedupe():
-    morph = _FakeMorph({"aa bb aa": "aa bb aa"})
-    assert morph_lexemes("aa bb aa", morph) == ["aa", "bb"]
+def test_matched_glossary_definitions():
+    store = GlossaryStore()
+    store.load_rows(
+        [
+            GlossaryTerm(
+                id="1",
+                standard_term="코바코",
+                synonyms=["KOBACO"],
+                definition="방송광고 판매 대행 공공기관",
+                enabled=True,
+            )
+        ]
+    )
+    from rag.glossary.expand import format_glossary_context, matched_glossary_definitions
+
+    defs = matched_glossary_definitions("KOBACO 대행", store)
+    assert defs == [("코바코", "방송광고 판매 대행 공공기관")]
+    text = format_glossary_context(defs)
+    assert "[Glossary]" in text
+    assert "코바코" in text

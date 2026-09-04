@@ -60,6 +60,8 @@ Query (원문)
 
 Dense/rerank는 원문 쿼리 유지. Sparse는 Postgres **`ts_rank` FTS** (`fts_search`).
 
+`POST /v1/query`의 `include_glossary_definitions`(default **false**): true면 질의에서 매칭된 용어의 `definition`만 LLM 컨텍스트 앞에 `[Glossary]` 블록으로 붙인다.
+
 ---
 
 ## 3. Ingest

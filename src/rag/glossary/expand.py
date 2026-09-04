@@ -119,3 +119,34 @@ def build_expanded_tsquery(
         return " & ".join(morph_lexemes(query, morph)) or sanitize_lexeme(query) or ""
 
     return " & ".join(and_parts)
+
+
+def matched_glossary_definitions(
+    query: str,
+    store: GlossaryStore | None = None,
+) -> list[tuple[str, str]]:
+    """Return ``(standard_term, definition)`` for surfaces matched in ``query``."""
+    store = store or get_glossary_store()
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for surface, aliases in longest_surface_segments(query, store):
+        if aliases is None:
+            continue
+        hit = store.definition_for_surface(surface)
+        if hit is None:
+            continue
+        standard, definition = hit
+        if standard in seen:
+            continue
+        seen.add(standard)
+        out.append((standard, definition))
+    return out
+
+
+def format_glossary_context(definitions: list[tuple[str, str]]) -> str:
+    if not definitions:
+        return ""
+    lines = ["[Glossary]"]
+    for standard, definition in definitions:
+        lines.append(f"- {standard}: {definition}")
+    return "\n".join(lines) + "\n"
