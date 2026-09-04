@@ -71,9 +71,14 @@ class IngestionPipeline:
 
             db_chunks: list[Chunk] = []
             index_docs = []
+            id_by_index: dict[int, uuid.UUID] = {}
 
             for text_chunk in all_text_chunks:
                 chunk_id = uuid.uuid4()
+                id_by_index[text_chunk.chunk_index] = chunk_id
+                parent_chunk_id = None
+                if text_chunk.parent_chunk_index is not None:
+                    parent_chunk_id = id_by_index.get(text_chunk.parent_chunk_index)
 
                 db_chunk = Chunk(
                     id=chunk_id,
@@ -85,6 +90,7 @@ class IngestionPipeline:
                     page=text_chunk.page,
                     type=text_chunk.type,
                     bbox=text_chunk.bbox,
+                    parent_chunk_id=parent_chunk_id,
                 )
                 db_chunks.append(db_chunk)
 

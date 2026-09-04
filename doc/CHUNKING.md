@@ -42,7 +42,7 @@
 2. **원본 표** 청크 1개 유지 (`type=table`, heading prefix는 여기에만) — DB에는 저장
 3. 데이터 행 ≥ 2이면 행마다 `type=table_row` 추가 (`헤더줄\n데이터줄`, `|---|` 제외)
 4. **검색:** row-split된 원본 `table`은 embedding/FTS **미적재** (`searchable=false`). 행만 검색
-5. **컨텍스트:** `table_row` hit → 부모 표 content로 expand + 같은 부모 dedupe ([`table_expand.py`](../src/rag/retrieval/table_expand.py))
+5. **컨텍스트:** `table_row` hit → `parent_chunk_id`로 부모 표 content expand + 같은 부모 dedupe ([`table_expand.py`](../src/rag/retrieval/table_expand.py)). FK 없으면 레거시로 앞쪽 최근 `table` 청크 id를 찾음.
 6. 행 1개 이하면 split 없음 (원본만 검색)
 7. 행 청크의 `page`/`bbox`는 부모 표와 동일
 

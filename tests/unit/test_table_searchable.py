@@ -51,6 +51,7 @@ def test_expand_collapses_rows_to_parent_table():
         type="table",
         searchable=False,
     )
+    parent_id = "parent-0"
     hits = [
         {
             "chunk_id": "row-1",
@@ -62,7 +63,7 @@ def test_expand_collapses_rows_to_parent_table():
             "rank": 1,
             "type": "table_row",
             "chunk_index": 1,
-            "parent_chunk_index": 0,
+            "parent_chunk_id": parent_id,
         },
         {
             "chunk_id": "row-2",
@@ -74,7 +75,7 @@ def test_expand_collapses_rows_to_parent_table():
             "rank": 2,
             "type": "table_row",
             "chunk_index": 2,
-            "parent_chunk_index": 0,
+            "parent_chunk_id": parent_id,
         },
         {
             "chunk_id": "text-1",
@@ -86,14 +87,14 @@ def test_expand_collapses_rows_to_parent_table():
             "rank": 3,
             "type": "text",
             "chunk_index": 3,
-            "parent_chunk_index": None,
+            "parent_chunk_id": None,
         },
     ]
-    parents = {("d1", 0): {"chunk_id": "parent-0", "content": parent.content}}
+    parents = {parent_id: {"chunk_id": parent_id, "content": parent.content}}
 
-    expanded = expand_table_row_hits(hits, parents_by_doc_index=parents)
+    expanded = expand_table_row_hits(hits, parents_by_id=parents)
     assert len(expanded) == 2
-    assert expanded[0]["chunk_id"] == "parent-0"
+    assert expanded[0]["chunk_id"] == parent_id
     assert expanded[0]["content"] == parent.content
     assert expanded[0]["score"] == 0.9  # best row score kept
     assert expanded[1]["chunk_id"] == "text-1"
@@ -111,9 +112,9 @@ def test_expand_keeps_row_when_parent_missing():
             "rank": 1,
             "type": "table_row",
             "chunk_index": 1,
-            "parent_chunk_index": 0,
+            "parent_chunk_id": "missing-parent",
         }
     ]
-    expanded = expand_table_row_hits(hits, parents_by_doc_index={})
+    expanded = expand_table_row_hits(hits, parents_by_id={})
     assert len(expanded) == 1
     assert expanded[0]["chunk_id"] == "row-1"
