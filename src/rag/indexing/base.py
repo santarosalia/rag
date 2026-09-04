@@ -27,7 +27,7 @@ class SearchBackend(Protocol):
         group_id: str | None = None,
     ) -> list[dict[str, Any]]: ...
 
-    async def bm25_search(
+    async def fts_search(
         self,
         query_text: str,
         k: int = 50,

@@ -177,7 +177,7 @@ chunks
 
 ## 7. 검색 · 생성
 
-`knn_search` / `bm25_search` WHERE에 `c.role = 'child'` (및 기존 `embedding`/`tsv` NOT NULL, `documents.status = 'completed'`).
+`knn_search` / `fts_search` WHERE에 `c.role = 'child'` (및 기존 `embedding`/`tsv` NOT NULL, `documents.status = 'completed'`).
 
 rerank 입력은 **child `content`**. 부모로 rerank하면 큰 표 윈도우가 서로 비슷해진다.
 

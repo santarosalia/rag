@@ -68,6 +68,13 @@ def _dispose_inherited_engine(**_kwargs) -> None:
     from rag.db.session import engine as async_engine
 
     async_engine.sync_engine.dispose()
+    try:
+        from rag.glossary.store import load_glossary_sync
+
+        with get_sync_session() as session:
+            load_glossary_sync(session)
+    except Exception as e:
+        logger.warning("glossary_store_worker_init_deferred", error=str(e))
 
 
 @celery_app.task(bind=True, name="rag.ingest_document", max_retries=3)

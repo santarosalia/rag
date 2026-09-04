@@ -70,7 +70,7 @@ class RetrievalPipeline:
 
         if mode in (SearchMode.SPARSE, SearchMode.HYBRID):
             t0 = time.perf_counter()
-            sparse_hits = await self.search_backend.bm25_search(
+            sparse_hits = await self.search_backend.fts_search(
                 query,
                 k=sparse_k,
                 group_id=group_id,

@@ -69,7 +69,7 @@ flowchart TB
 
 1. Client → `POST /v1/query` (query text)
 2. API → query embedding (Redis cache check)
-3. Parallel: pgvector kNN + FTS (`ts_rank` on `tsv`, Kiwi morph query)
+3. Parallel: pgvector kNN + FTS (`ts_rank`; Sparse만 용어집 OR 확장 → Kiwi)
 4. RRF fuse → Cross-encoder rerank top-5
 5. `table_row` hit → `parent_chunk_id`로 부모 표 content expand · 부모 dedupe
 6. Build context (청크 전문, tiktoken 4096 예산, 마지막만 자름) → LLM generate
@@ -122,10 +122,16 @@ src/rag/
 │   ├── main.py       # lifespan, health/ready/metrics
 │   ├── routes.py     # /v1/documents, retrieve, query
 │   ├── groups.py     # /v1/groups CRUD
+│   ├── glossary.py   # /v1/glossary CRUD
 │   └── middleware.py # API key, rate limit
 ├── groups/
 │   ├── filter.py     # retrieve SQL 필터
 │   └── service.py    # CRUD, 삭제 정책
+├── glossary/
+│   ├── store.py      # surface → alias 맵
+│   ├── expand.py     # Sparse OR tsquery
+│   ├── csv_io.py
+│   └── service.py
 ├── ingestion/
 │   ├── chunker.py         # TextChunk
 │   ├── parse_items.py     # ParseResponse.results → TextChunk
@@ -147,7 +153,7 @@ src/rag/
 ├── workers/
 │   └── celery_app.py
 ├── db/
-│   ├── models.py     # Group, Document, Chunk, IngestJob
+│   ├── models.py     # Group, Document, Chunk, IngestJob, GlossaryTerm
 │   └── session.py
 ├── observability/
 │   ├── logging.py

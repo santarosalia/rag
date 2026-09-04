@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from rag.api.glossary import router as glossary_router
 from rag.api.groups import router as groups_router
 from rag.db.models import Document
 from rag.db.models import DocumentStatus as DBDocumentStatus
@@ -42,6 +43,7 @@ def _enqueue_delete(doc_id: str):
 
 router = APIRouter(prefix="/v1")
 router.include_router(groups_router)
+router.include_router(glossary_router)
 
 
 async def _enqueue_parse(

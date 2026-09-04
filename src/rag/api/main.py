@@ -40,6 +40,15 @@ async def lifespan(app: FastAPI):
     finally:
         await search_backend.close()
 
+    try:
+        from rag.db.session import AsyncSessionLocal
+        from rag.glossary.store import load_glossary_async
+
+        async with AsyncSessionLocal() as session:
+            await load_glossary_async(session)
+    except Exception as e:
+        logger.warning("glossary_store_init_deferred", error=str(e))
+
     yield
     await engine.dispose()
     logger.info("rag_api_shutdown")

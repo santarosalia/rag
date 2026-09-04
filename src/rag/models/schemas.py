@@ -147,3 +147,35 @@ class GroupDocumentItem(BaseModel):
     status: DocumentStatus
     chunk_count: int
     created_at: datetime
+
+
+class GlossaryCreate(BaseModel):
+    id: str = Field(..., min_length=1, max_length=64)
+    standard_term: str = Field(..., min_length=1, max_length=256)
+    synonyms: list[str] = Field(default_factory=list)
+    category: str | None = Field(default=None, max_length=128)
+    definition: str | None = None
+    enabled: bool = True
+
+
+class GlossaryUpdate(BaseModel):
+    standard_term: str | None = Field(default=None, min_length=1, max_length=256)
+    synonyms: list[str] | None = None
+    category: str | None = Field(default=None, max_length=128)
+    definition: str | None = None
+    enabled: bool | None = None
+
+
+class GlossaryResponse(BaseModel):
+    id: str
+    standard_term: str
+    synonyms: list[str]
+    category: str | None = None
+    definition: str | None = None
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class GlossaryReloadResponse(BaseModel):
+    surfaces: int
