@@ -5,7 +5,7 @@
 > **검색 시 표 복원:** [`table_expand.py`](../src/rag/retrieval/table_expand.py)  
 > **설정:** [`configs/default.yaml`](../configs/default.yaml) `chunking.max_tokens` (기본 **768**)
 
-관련: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · DocuOps 대비 [`DOCUOPS_RAG_STRATEGY.md`](DOCUOPS_RAG_STRATEGY.md)
+관련: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`KIWI.md`](KIWI.md) · DocuOps 대비 [`DOCUOPS_RAG_STRATEGY.md`](DOCUOPS_RAG_STRATEGY.md)
 
 ---
 
