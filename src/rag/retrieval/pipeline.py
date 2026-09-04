@@ -13,6 +13,7 @@ from rag.retrieval.embeddings import (
     get_reranker_service,
 )
 from rag.retrieval.fusion import rrf_fuse
+from rag.retrieval.table_expand import expand_hits_with_parent_tables
 
 logger = get_logger(__name__)
 
@@ -69,7 +70,7 @@ class RetrievalPipeline:
 
         if mode in (SearchMode.SPARSE, SearchMode.HYBRID):
             t0 = time.perf_counter()
-            sparse_hits = await self.search_backend.bm25_search(
+            sparse_hits = await self.search_backend.fts_search(
                 query,
                 k=sparse_k,
                 group_id=group_id,
@@ -93,6 +94,10 @@ class RetrievalPipeline:
             RETRIEVAL_LATENCY.labels(stage="rerank").observe(latency["rerank_ms"] / 1000)
         else:
             hits = hits[:rerank_top_n]
+
+        t0 = time.perf_counter()
+        hits = await expand_hits_with_parent_tables(hits)
+        latency["table_expand_ms"] = (time.perf_counter() - t0) * 1000
 
         citations = self._to_citations(hits)
         latency["total_ms"] = sum(latency.values())

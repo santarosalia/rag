@@ -68,6 +68,13 @@ def _dispose_inherited_engine(**_kwargs) -> None:
     from rag.db.session import engine as async_engine
 
     async_engine.sync_engine.dispose()
+    try:
+        from rag.glossary.store import load_glossary_sync
+
+        with get_sync_session() as session:
+            load_glossary_sync(session)
+    except Exception as e:
+        logger.warning("glossary_store_worker_init_deferred", error=str(e))
 
 
 @celery_app.task(bind=True, name="rag.ingest_document", max_retries=3)
@@ -112,7 +119,6 @@ def ingest_document_task(self, doc_id: str, job_id: str) -> dict:
 @celery_app.task(bind=True, name="rag.delete_document", max_retries=3)
 def delete_document_task(self, doc_id: str) -> dict:
     from rag.indexing.factory import get_search_backend
-    from rag.storage.s3 import ObjectStorage
 
     async def _delete():
         from rag.db.session import worker_session
@@ -132,8 +138,6 @@ def delete_document_task(self, doc_id: str) -> dict:
             return {"doc_id": doc_id, "status": "not_found"}
 
         run_async(_delete())
-        storage = ObjectStorage()
-        storage.delete(document.s3_key)
         document.status = DocumentStatus.DELETED
         document.deleted_at = datetime.now(UTC)
         session.commit()

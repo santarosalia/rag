@@ -1,0 +1,305 @@
+# material Docling JSON 기반 — 문서당 심플 질의 5문항 (총 50)
+#
+# 코퍼스: Markdown으로 변환 후 POST /v1/documents 로 적재
+#   uv run python scripts/ingest_cli.py tests/material --group-id material
+#
+# Usage:
+#   uv run python scripts/eval_ragas.py tests/eval/ragas_input/material-simple.yaml --dry-run
+#   uv run python scripts/eval_ragas.py tests/eval/ragas_input/material-simple.yaml
+
+name: material-simple
+description: tests/material 문서 10개 × 심플 질의 5문항 (단답·단일 사실)
+use: true
+
+defaults:
+  runner: api
+  api_url: http://localhost:7500
+  group_id: lit
+  top_k: 5
+  include_citations: true
+  snippet: false
+  content: true
+
+  metrics:
+    - faithfulness
+    - context_recall
+    - context_precision
+
+  thresholds:
+    faithfulness: 0.70
+    context_recall: 0.70
+    context_precision: 0.70
+    answer_relevancy: 0.70
+
+  judge:
+    model: Qwen/Qwen3.5-35B-A3B-FP8
+    base_url: null
+    api_key_env: LLM_API_KEY
+    temperature: 0.0
+    max_tokens: 4096
+
+  embeddings:
+    model: text-embedding-3-small
+    base_url: null
+    api_key_env: LLM_API_KEY
+
+items:
+  # --- doc 1: 2026년 정보시스템 통합유지운영 기본계획 ---
+  - id: d01-s01
+    question: 2026년 정보시스템 통합유지운영 사업의 사업기간은 언제인가요?
+    ground_truth: |
+      2026년 1월 1일부터 2026년 12월 31일까지입니다.
+
+  - id: d01-s02
+    question: 2026년 정보시스템 통합유지운영 사업의 수행업체는 어디인가요?
+    ground_truth: |
+      (주)군앤트입니다.
+
+  - id: d01-s03
+    question: 2026년 정보시스템 통합유지운영의 총 소요예산은 얼마인가요?
+    ground_truth: |
+      총 소요예산은 2,053,984천원입니다.
+
+  - id: d01-s04
+    question: KOBAnet, KODEX, 심의관리시스템 운영 및 개선은 어느 팀이 담당하나요?
+    ground_truth: |
+      AI혁신팀이 담당합니다.
+
+  - id: d01-s05
+    question: 2026년 정보시스템 통합유지운영 기본계획의 담당자 이메일은 무엇인가요?
+    ground_truth: |
+      nyuks4843@kobaco.co.kr입니다.
+
+  # --- doc 2: AiSAC 시스템 통합 유지관리 계약 결과 보고 ---
+  - id: d02-s01
+    question: 2026년 AiSAC 시스템 통합 유지관리 용역의 계약업체는 어디인가요?
+    ground_truth: |
+      주식회사 나라원 시스템입니다.
+
+  - id: d02-s02
+    question: 2026년 AiSAC 시스템 통합 유지관리 용역의 계약금액은 얼마인가요?
+    ground_truth: |
+      170,000,000원이며 부가가치세는 별도입니다.
+
+  - id: d02-s03
+    question: 2026년 AiSAC 시스템 통합 유지관리 용역의 계약기간은 언제부터 언제까지인가요?
+    ground_truth: |
+      2026년 2월 9일부터 2026년 12월 31일까지이며 약 11개월입니다.
+
+  - id: d02-s04
+    question: AiSAC 유지관리 계약 결과 보고의 시행 문서번호는 무엇인가요?
+    ground_truth: |
+      디지털혁신센터-104입니다.
+
+  - id: d02-s05
+    question: AiSAC 유지관리 계약 결과 보고의 담당자는 누구인가요?
+    ground_truth: |
+      장현진(navy469@kobaco.co.kr)입니다.
+
+  # --- doc 3: AI 솔루션 및 협업툴 이용 계획 ---
+  - id: d03-s01
+    question: AI혁신팀이 이용하려는 AI 솔루션과 협업툴은 무엇인가요?
+    ground_truth: |
+      ChatGPT(OpenAI)와 Notion(Notion Labs) 등입니다.
+
+  - id: d03-s02
+    question: AI 솔루션 및 협업툴의 이용기간은 언제인가요?
+    ground_truth: |
+      2026년 1월 15일부터 2026년 12월 31일까지입니다.
+
+  - id: d03-s03
+    question: AI 솔루션 및 협업툴 이용의 소요예산은 얼마인가요?
+    ground_truth: |
+      2,000,000원이며 부가세는 별도입니다.
+
+  - id: d03-s04
+    question: AI 솔루션 및 협업툴 이용 예산의 예산항목 코드는 무엇인가요?
+    ground_truth: |
+      53212D3(AI광고창작시스템 구축및운영)입니다.
+
+  - id: d03-s05
+    question: AI 솔루션 및 협업툴은 어떤 계정으로 구독하나요?
+    ground_truth: |
+      AI혁신팀 대표 계정으로 구독한 뒤 업무에 공유합니다.
+
+  # --- doc 4: AiSAC 본인인증 서비스 이용 계획 ---
+  - id: d04-s01
+    question: AiSAC 본인인증 서비스의 구매 업체는 어디인가요?
+    ground_truth: |
+      NICE평가정보(주)입니다.
+
+  - id: d04-s02
+    question: AiSAC 본인인증 서비스의 구매기간은 언제인가요?
+    ground_truth: |
+      2026년 1월 11일부터 2027년 1월 10일까지입니다.
+
+  - id: d04-s03
+    question: AiSAC 본인인증 서비스의 소요예산은 얼마인가요?
+    ground_truth: |
+      3,000,000원이며 VAT는 별도입니다.
+
+  - id: d04-s04
+    question: 본인인증 기본 제공 건수는 몇 건인가요?
+    ground_truth: |
+      기본 제공 건수는 5만 건입니다.
+
+  - id: d04-s05
+    question: 본인인증 5만 건을 초과하면 추가 요금은 얼마인가요?
+    ground_truth: |
+      5만 건 초과 시 건당 50원이 추가로 소요됩니다.
+
+  # --- doc 5: 텍스트 생성 AI 및 번역 API 이용계획 ---
+  - id: d05-s01
+    question: AiSAC 텍스트 생성 AI 및 번역 API 이용계획의 수정품의 사유는 무엇인가요?
+    ground_truth: |
+      Papago Translation 상품을 추가하기 위한 수정품의입니다.
+
+  - id: d05-s02
+    question: 광고 카피(N카피) 생성에 연계 이용하는 AI 도구는 무엇인가요?
+    ground_truth: |
+      네이버클라우드 CLOVA Studio입니다.
+
+  - id: d05-s03
+    question: Papago Text Translation API 요금은 어떻게 되나요?
+    ground_truth: |
+      1,000,000 글자당 20,000원이 부과됩니다.
+
+  - id: d05-s04
+    question: 텍스트 생성 AI 및 번역 API의 이용기간은 언제인가요?
+    ground_truth: |
+      2026년 1월 1일부터 2026년 12월 31일까지입니다.
+
+  - id: d05-s05
+    question: 텍스트 생성 AI 및 번역 API의 소요예산은 얼마인가요?
+    ground_truth: |
+      3,000,000원이며 부가세는 제외입니다.
+
+  # --- doc 6: AiSAC GPU 서버 인터넷 이용료 집행 계획 ---
+  - id: d06-s01
+    question: AiSAC GPU 서버 인터넷 이용료의 계약업체는 어디인가요?
+    ground_truth: |
+      (주)엘지유플러스입니다.
+
+  - id: d06-s02
+    question: AiSAC GPU 서버 인터넷 이용료의 이용기간은 언제인가요?
+    ground_truth: |
+      2026년 1월 1일부터 2026년 12월 31일까지입니다.
+
+  - id: d06-s03
+    question: AiSAC GPU 서버 인터넷 이용료의 연간 소요예산은 얼마인가요?
+    ground_truth: |
+      145,200원 × 12개월 = 1,742,400원이며 부가세가 포함됩니다.
+
+  - id: d06-s04
+    question: AiSAC GPU 서버 인터넷 이용료의 월 단가는 얼마인가요?
+    ground_truth: |
+      월 145,200원입니다.
+
+  - id: d06-s05
+    question: AiSAC GPU 서버 인터넷 이용료의 예산계정은 무엇인가요?
+    ground_truth: |
+      53212D3(AI광고창작시스템구축및운영)입니다.
+
+  # --- doc 7: AiSAC 서비스 정보통신망 이용계획 ---
+  - id: d07-s01
+    question: AiSAC 인터넷 서비스의 가입상품은 무엇인가요?
+    ground_truth: |
+      LG 오피스넷(500Mbps, 고정 IP 포함)입니다.
+
+  - id: d07-s02
+    question: AiSAC 인터넷 서비스의 소요예산은 얼마인가요?
+    ground_truth: |
+      1,600,000원이며 부가세는 별도입니다.
+
+  - id: d07-s03
+    question: 정보통신망 이용계획상 본인인증 서비스 계약업체는 어디인가요?
+    ground_truth: |
+      나이스평가정보(주)입니다.
+
+  - id: d07-s04
+    question: 정보통신망 이용계획의 본인인증 서비스 소요예산은 얼마인가요?
+    ground_truth: |
+      3,100,000원이며 부가세는 별도입니다.
+
+  - id: d07-s05
+    question: 정보통신망 이용계획의 총 소요예산은 얼마인가요?
+    ground_truth: |
+      총 4,700,000원이며 부가세는 제외입니다.
+
+  # --- doc 8: 클라우드 서비스 이용계획 ---
+  - id: d08-s01
+    question: 클라우드 서비스 이용계획의 계약업체는 어디인가요?
+    ground_truth: |
+      주식회사 아이지니입니다.
+
+  - id: d08-s02
+    question: 클라우드 서비스의 CSP 업체는 어디인가요?
+    ground_truth: |
+      네이버 클라우드입니다.
+
+  - id: d08-s03
+    question: 클라우드 서비스의 이용기간은 언제인가요?
+    ground_truth: |
+      2026년 1월 1일부터 2026년 12월 31일까지입니다.
+
+  - id: d08-s04
+    question: 클라우드 서비스의 연간 한도 예산은 얼마인가요?
+    ground_truth: |
+      연간 한도 49,500,000원이며 부가세는 별도입니다.
+
+  - id: d08-s05
+    question: 클라우드 서비스의 월 집행 예상 금액은 얼마인가요?
+    ground_truth: |
+      월 3,191,790원(부가세 별도)이며, 연간으로는 37,581,480원입니다.
+
+  # --- doc 9: AiSAC 2차 평가위원회 개최 계획 ---
+  - id: d09-s01
+    question: AiSAC 통합 유지관리 2차 평가위원회의 심사일시와 장소는 어디인가요?
+    ground_truth: |
+      2026년 1월 27일(화) 15:00, 본사 17층 대회의실입니다.
+
+  - id: d09-s02
+    question: 2차 평가위원회의 심사위원 구성은 어떻게 되나요?
+    ground_truth: |
+      총 7명으로 외부 4명, 내부 3명입니다.
+
+  - id: d09-s03
+    question: 1차 평가에서 적격 판정된 업체의 입찰가격은 얼마인가요?
+    ground_truth: |
+      (주)나라원 시스템의 입찰가격은 186,340,000원입니다.
+
+  - id: d09-s04
+    question: 2차 평가위원회 개최 계획의 소요예산은 얼마인가요?
+    ground_truth: |
+      1,300,000원입니다.
+
+  - id: d09-s05
+    question: 평가점수 배분에서 기술평가와 가격평가의 배점은 각각 몇 점인가요?
+    ground_truth: |
+      기술평가(제안평가) 90점, 가격평가 10점입니다.
+
+  # --- doc 10: 2026년 연간 정보화 기본 계획 ---
+  - id: d10-s01
+    question: 2026년 연간 정보화 기본 계획의 기본 방침은 무엇인가요?
+    ground_truth: |
+      AX 추진 전략 수립 및 AI 생태계 기반 조성입니다.
+
+  - id: d10-s02
+    question: 정보화 추진 과제 세 가지는 무엇인가요?
+    ground_truth: |
+      ① AI 인프라 구축, ② 서비스 고도화, ③ 안정적 서비스 운영입니다.
+
+  - id: d10-s03
+    question: AiSAC 스토리보드 생성형 모델은 어떤 모델로 업그레이드하나요?
+    ground_truth: |
+      네이버클로바 HCX-003에서 HCX-007(상위모델)로 업그레이드합니다.
+
+  - id: d10-s04
+    question: 2026년 연간 정보화 기본 계획의 총 소요예산은 얼마인가요?
+    ground_truth: |
+      360,500천원입니다.
+
+  - id: d10-s05
+    question: AiSAC 통합유지운영 SLA에서 SR 적기 처리율의 비중은 얼마인가요?
+    ground_truth: |
+      SR 적기 처리율은 40%입니다.

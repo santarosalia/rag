@@ -34,15 +34,16 @@
 
 ### 1.4 파싱 경계 (적재는 이 저장소)
 
-Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적재·검색은 **본 저장소**가 담당한다. 바깥으로 둘 수 있는 것은 **원본 파싱**뿐이다.
+Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적재·검색은 **본 저장소**가 담당한다. **원본 파싱(PDF/OCR 등)은 하지 않는다** — UTF-8 Markdown만 받는다.
 
-| 경로 | 입력 | 파싱 | 이후 |
-|------|------|------|------|
-| A. 원본 | `POST /v1/documents` 파일 | 이 저장소 MarkItDown | 동일 적재 파이프라인 |
-| B. 파싱본 | `POST /v1/documents/parsed` JSON 또는 `/parsed/file` | 외부 파서 | 동일 적재 파이프라인 |
+| API | 입력 |
+|-----|------|
+| `POST /v1/documents` | Markdown 파일 |
+| `POST /v1/documents` | 원본 → Parser Service → parse_json |
+| `POST /v1/documents/parse/file` | ParseResponse / ResultItem[] |
 
-외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다. 중간 포맷은 Markdown.  
-→ 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md)
+외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다.  
+→ 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md) (Superseded → Markdown-only)
 
 ---
 
@@ -58,7 +59,7 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastAPI (rag-api)                            │
-│  POST /v1/documents  POST /v1/documents/parsed[/file]                │
+│  POST /v1/documents  POST /v1/documents/parse/file                    │
 │  GET /v1/documents/{id}  DELETE                                      │
 │  POST /v1/retrieve   POST /v1/query                              │
 │  GET /health  GET /ready  GET /metrics                           │
@@ -110,25 +111,24 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 ### 3.1 흐름
 
 ```
-Upload → S3 저장 → Celery Job → MarkItDown (또는 경로 B Markdown 패스스루)
+Upload (UTF-8 Markdown) → S3 저장 → Celery Job
        → Semantic Chunker → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
        → PostgreSQL documents 상태 갱신
 ```
 
 ### 3.2 지원 문서 포맷
 
-경로 A는 원본을 **MarkItDown**으로 Markdown으로 맞춘 뒤 적재한다. 경로 B는 이미 변환된 Markdown을 받는다. 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md).
+**Markdown만.** PDF/Office 파싱은 외부. 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md).
 
-| 경로 | 입력 | 변환 |
-|------|------|------|
-| A. 원본 | `POST /v1/documents` PDF/DOCX/PPTX 등 | 이 저장소 MarkItDown |
-| B. 파싱본 | `POST /v1/documents/parsed` JSON 또는 `/parsed/file` | 패스스루 |
+| API | 입력 |
+|-----|------|
+| `POST /v1/documents` | Markdown 파일 |
+| `POST /v1/documents` | 원본 → Parser Service → parse_json |
+| `POST /v1/documents/parse/file` | ParseResponse / ResultItem[] |
 
 ### 3.3 Chunking 전략
 
-Markdown ATX 헤딩(`#`–`######`)·파이프 표·코드 펜스·HTML 표 경계를 우선하는 Semantic Chunker (`max_tokens` 768, `overlap_tokens` 128, `min_chunk_tokens` 64).  
-`min_chunk_tokens` 미만 본문은 버리지 않고 이전 청크에 붙인다. 상세: [`CHUNKING.md`](CHUNKING.md).  
-다음: 검색=child / 생성=parent, 거대 표만 행 그룹 — [`PARENT_CHILD_PLANNING.md`](PARENT_CHILD_PLANNING.md).
+`ParseResponse.results` 레이아웃 item 단위 (`max_tokens` 768). 표는 원본+`table_row` + `parent_chunk_id` expand. 상세: [`CHUNKING.md`](CHUNKING.md).
 
 ### 3.4 메타데이터 스키마
 
@@ -241,8 +241,7 @@ score(chunk) = Σ  1 / (k + rank_i)
 | DELETE | `/v1/groups/{id}` | 빈 그룹만 삭제 | 없음 |
 | GET | `/v1/groups/{id}/documents` | 소속 문서 목록 | 없음 |
 | POST | `/v1/documents` | 문서 업로드 (`group_id` Form 필수) → ingest job | 없음 |
-| POST | `/v1/documents/parsed` | 파싱 Markdown JSON | 없음 |
-| POST | `/v1/documents/parsed/file` | 파싱 Markdown 파일 | 없음 |
+| POST | `/v1/documents/parse/file` | ParseResponse JSON | 없음 |
 | GET | `/v1/documents/{id}` | 문서/인덱싱 상태 조회 | 없음 |
 | DELETE | `/v1/documents/{id}` | 소프트 삭제 + 검색 필드 NULL | 없음 |
 | POST | `/v1/retrieve` | 검색만 (LLM 없음). `group_id` 선택 | 없음 |

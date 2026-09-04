@@ -2,8 +2,10 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from typing import Any
+
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -55,8 +57,7 @@ class Document(Base):
     )
     filename: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(128))
-    s3_key: Mapped[str] = mapped_column(String(1024))
-    parse_kind: Mapped[str] = mapped_column(String(16), default="original", nullable=False)
+    parse_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(
             DocumentStatus,
@@ -100,6 +101,14 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer, default=0)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bbox: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    parent_chunk_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chunks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     content_morph: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -131,3 +140,18 @@ class IngestJob(Base):
     )
 
     document: Mapped["Document"] = relationship(back_populates="jobs")
+
+
+class GlossaryTerm(Base):
+    __tablename__ = "glossary_terms"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    standard_term: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    synonyms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    category: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    definition: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

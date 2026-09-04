@@ -4,18 +4,21 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from rag.api.glossary import router as glossary_router
 from rag.api.groups import router as groups_router
 from rag.db.models import Document
 from rag.db.models import DocumentStatus as DBDocumentStatus
 from rag.db.session import get_db
 from rag.generation.service import QueryService
 from rag.groups.service import require_group, resolve_search_group
+from rag.ingestion.parser_client import ParserClient, ParserError
+from rag.ingestion.parse_items import load_parse_response
 from rag.ingestion.pipeline import create_document_record
+from rag.models.parse import ParseResponse
 from rag.models.schemas import (
     DocumentResponse,
     DocumentStatus,
     DocumentUploadResponse,
-    ParsedDocumentRequest,
     QueryRequest,
     QueryResponse,
     RetrieveRequest,
@@ -24,7 +27,6 @@ from rag.models.schemas import (
 )
 from rag.observability.metrics import QUERY_COUNTER
 from rag.retrieval.pipeline import RetrievalPipeline
-from rag.storage.s3 import ObjectStorage
 
 
 def _enqueue_ingest(doc_id: str, job_id: str):
@@ -41,29 +43,33 @@ def _enqueue_delete(doc_id: str):
 
 router = APIRouter(prefix="/v1")
 router.include_router(groups_router)
+router.include_router(glossary_router)
 
 
-async def _enqueue_parsed_markdown(
+async def _enqueue_parse(
     db: AsyncSession,
     *,
     group_id: str,
     filename: str,
     content_type: str,
-    data: bytes,
+    parse: ParseResponse,
 ) -> DocumentUploadResponse:
     await require_group(db, group_id)
-    storage = ObjectStorage()
+    if parse.status.upper() == "FAIL":
+        raise HTTPException(
+            status_code=502,
+            detail=parse.error or "Parser returned FAIL",
+        )
+    if not parse.results:
+        raise HTTPException(status_code=400, detail="Parse response has no results")
+
     document, job = await create_document_record(
         db,
         filename=filename,
         content_type=content_type,
-        s3_key="pending",
+        parse=parse,
         group_id=group_id,
-        parse_kind="markdown",
     )
-    stored = storage.upload(data, "content.md", doc_id=document.id)
-    document.s3_key = stored.key
-    await db.flush()
     task = _enqueue_ingest(str(document.id), str(job.id))
     job.celery_task_id = task.id
     await db.flush()
@@ -71,14 +77,8 @@ async def _enqueue_parsed_markdown(
         doc_id=document.id,
         job_id=job.id,
         status=DocumentStatus.PENDING,
+        parse=parse,
     )
-
-
-def _utf8_markdown(data: bytes) -> bytes:
-    text = data.decode("utf-8-sig", errors="replace").strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="markdown is required")
-    return text.encode("utf-8")
 
 
 @router.post("/documents", response_model=DocumentUploadResponse)
@@ -87,86 +87,63 @@ async def upload_document(
     group_id: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required")
+    """Upload a source file, parse via Parser Service, then queue ParseResponse ingest."""
     if not group_id or not group_id.strip():
         raise HTTPException(status_code=400, detail="group_id is required")
-
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file")
-
-    await require_group(db, group_id)
-
-    storage = ObjectStorage()
-
-    document, job = await create_document_record(
-        db,
-        filename=file.filename,
-        content_type=file.content_type or "application/octet-stream",
-        s3_key="pending",
-        group_id=group_id,
-    )
-
-    stored = storage.upload(data, file.filename, doc_id=document.id)
-    document.s3_key = stored.key
-    await db.flush()
-
-    task = _enqueue_ingest(str(document.id), str(job.id))
-    job.celery_task_id = task.id
-    await db.flush()
-
-    return DocumentUploadResponse(
-        doc_id=document.id,
-        job_id=job.id,
-        status=DocumentStatus.PENDING,
-    )
-
-
-@router.post("/documents/parsed", response_model=DocumentUploadResponse)
-async def upload_parsed_document(
-    body: ParsedDocumentRequest,
-    db: AsyncSession = Depends(get_db),
-) -> DocumentUploadResponse:
-    markdown = body.markdown.strip()
-    if not markdown:
-        raise HTTPException(status_code=400, detail="markdown is required")
-    filename = body.filename.strip()
-    if not filename:
-        raise HTTPException(status_code=400, detail="filename is required")
-
-    return await _enqueue_parsed_markdown(
-        db,
-        group_id=body.group_id,
-        filename=filename,
-        content_type=body.content_type or "text/markdown",
-        data=markdown.encode("utf-8"),
-    )
-
-
-@router.post("/documents/parsed/file", response_model=DocumentUploadResponse)
-async def upload_parsed_markdown_file(
-    file: UploadFile = File(...),
-    group_id: str | None = Form(default=None),
-    filename: str | None = Form(default=None),
-    db: AsyncSession = Depends(get_db),
-) -> DocumentUploadResponse:
-    if not group_id or not group_id.strip():
-        raise HTTPException(status_code=400, detail="group_id is required")
-    citation_name = (filename or file.filename or "").strip()
+    citation_name = (file.filename or "").strip()
     if not citation_name:
         raise HTTPException(status_code=400, detail="Filename is required")
 
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
-    data = _utf8_markdown(raw)
-    return await _enqueue_parsed_markdown(
+
+    try:
+        parse = await ParserClient().parse(
+            raw,
+            filename=citation_name,
+            content_type=file.content_type,
+        )
+    except ParserError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return await _enqueue_parse(
         db,
         group_id=group_id.strip(),
         filename=citation_name,
-        content_type=file.content_type or "text/markdown",
-        data=data,
+        content_type=file.content_type or "application/octet-stream",
+        parse=parse,
+    )
+
+
+@router.post("/documents/parse/file", response_model=DocumentUploadResponse)
+async def upload_parse_file(
+    file: UploadFile = File(...),
+    group_id: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUploadResponse:
+    """Upload ParseResponse JSON or ResultItem[] and queue ingest (no Parser Service)."""
+    if not group_id or not group_id.strip():
+        raise HTTPException(status_code=400, detail="group_id is required")
+    citation_name = (file.filename or "").strip()
+    if not citation_name:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    raw = await file.read()
+    if not raw or not raw.strip():
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    try:
+        parse = load_parse_response(raw)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid parse JSON: {exc}") from exc
+
+    return await _enqueue_parse(
+        db,
+        group_id=group_id.strip(),
+        filename=citation_name,
+        content_type=file.content_type or "application/json",
+        parse=parse,
     )
 
 
@@ -254,6 +231,7 @@ async def query(
             query=request.query,
             group_id=group_id,
             top_k=request.top_k,
+            include_glossary_definitions=request.include_glossary_definitions,
         )
         QUERY_COUNTER.labels(endpoint="query", status="success").inc()
         citations = (

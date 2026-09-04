@@ -1,6 +1,6 @@
 # RAG 아키텍처 상세
 
-> [RAG 기획서](./RAG_PLANNING.md) · [그룹](./GROUP_PLANNING.md) · [청킹](./CHUNKING.md) · [parent-child 청킹](./PARENT_CHILD_PLANNING.md) · [ADR](./adr/)
+> [RAG 기획서](./RAG_PLANNING.md) · [그룹](./GROUP_PLANNING.md) · [청킹](./CHUNKING.md) · [Kiwi FTS](./KIWI.md) · [parent-child 청킹](./PARENT_CHILD_PLANNING.md) · [DocuOps 전략 참고](./DOCUOPS_RAG_STRATEGY.md) · [ADR](./adr/)
 
 ## 컴포넌트 다이어그램
 
@@ -17,17 +17,15 @@ flowchart TB
   end
 
   subgraph ingest [Ingestion]
-    Upload[Document Upload]
-    MD[MarkItDown / parsed Markdown]
-    Chunker[Semantic Chunker]
+    Upload[ParseResponse Upload]
+    Chunker[results_to_chunks]
     EmbedWorker[Embedding BGE-M3]
     MorphWorker[Kiwi Morphology]
     CeleryWorker[Celery Worker]
   end
 
   subgraph storage [Storage]
-    S3[MinIO / S3]
-    PG[(PostgreSQL pgvector + FTS)]
+    PG[(PostgreSQL parse_json + pgvector + FTS)]
     Redis[(Redis)]
   end
 
@@ -41,9 +39,8 @@ flowchart TB
 
   App --> Auth --> RateLimit --> FastAPI
   FastAPI --> Upload
-  Upload --> S3
   Upload --> CeleryWorker
-  CeleryWorker --> MD --> Chunker --> EmbedWorker
+  CeleryWorker --> Chunker --> EmbedWorker
   EmbedWorker --> MorphWorker --> PG
 
   FastAPI --> Dense
@@ -62,20 +59,21 @@ flowchart TB
 ### 인덱싱
 
 1. Client → `POST /v1/documents` (multipart file + **필수** `group_id`)
-2. API → S3 upload + PostgreSQL document record (status: pending)
+2. API → Parser Service → `documents.parse_json` 저장 (status: pending)
 3. API → Celery `ingest_document` task enqueue
-4. Worker → parse → chunk → embed (BGE-M3) → Kiwi morph
-5. Worker → `chunks` 행에 `embedding`, `content_morph`, `tsv` 갱신
+4. Worker → `results[]` → [`CHUNKING.md`](CHUNKING.md) 규칙으로 청크 (표는 원본+`table_row`)
+5. Worker → 전 청크 INSERT (`parent_chunk_id` 포함); **searchable**만 embed (BGE-M3) + Kiwi → `embedding`/`content_morph`/`tsv`
 6. Worker → PostgreSQL status: completed, chunk_count 갱신
 
 ### 질의
 
 1. Client → `POST /v1/query` (query text)
 2. API → query embedding (Redis cache check)
-3. Parallel: pgvector kNN + FTS (`ts_rank` on `tsv`, Kiwi morph query)
+3. Parallel: pgvector kNN + FTS (`ts_rank`; Sparse만 용어집 OR 확장 → Kiwi)
 4. RRF fuse → Cross-encoder rerank top-5
-5. Build context (청크 전문, tiktoken 4096 예산, 마지막만 자름) → LLM generate
-6. Response: answer + citations[] + latency_ms (`backend: "pgvector"`)
+5. `table_row` hit → `parent_chunk_id`로 부모 표 content expand · 부모 dedupe
+6. Build context (청크 전문, tiktoken 4096 예산, 마지막만 자름) → LLM generate
+7. Response: answer + citations[] + latency_ms (`backend: "pgvector"`)
 
 ## PostgreSQL `chunks` 스키마
 
@@ -109,6 +107,9 @@ WHERE id = :chunk_id;
 | `content` | text | 원문 (LLM 컨텍스트 전문, API snippet은 미리보기) |
 | `content_morph` | text | Kiwi 형태소 분석 결과 |
 | `embedding` | vector(1024) | Dense kNN (cosine, HNSW) |
+| `type` | varchar(64) | ResultItem type (`table_row` 등) |
+| `bbox` | jsonb | prov[0].bbox |
+| `parent_chunk_id` | uuid FK → chunks.id | `table_row` → 부모 표 (nullable) |
 | `tsv` | tsvector | Sparse FTS (`plainto_tsquery('simple', …)`) |
 
 삭제 시 soft-delete: `embedding`, `content_morph`, `tsv`를 NULL로 초기화.
@@ -121,18 +122,27 @@ src/rag/
 │   ├── main.py       # lifespan, health/ready/metrics
 │   ├── routes.py     # /v1/documents, retrieve, query
 │   ├── groups.py     # /v1/groups CRUD
+│   ├── glossary.py   # /v1/glossary CRUD
 │   └── middleware.py # API key, rate limit
 ├── groups/
 │   ├── filter.py     # retrieve SQL 필터
 │   └── service.py    # CRUD, 삭제 정책
+├── glossary/
+│   ├── store.py      # surface → alias 맵
+│   ├── expand.py     # Sparse OR tsquery
+│   ├── csv_io.py
+│   └── service.py
 ├── ingestion/
-│   ├── markdown.py   # MarkItDown / 경로 B 패스스루
-│   ├── chunker.py    # SemanticChunker (헤딩·표)
-│   └── pipeline.py   # IngestionPipeline
+│   ├── chunker.py         # TextChunk
+│   ├── parse_items.py     # ParseResponse.results → TextChunk
+│   ├── table_markdown.py  # HTML table → pipe MD
+│   ├── parser_client.py
+│   └── pipeline.py        # IngestionPipeline (parse_json)
 ├── retrieval/
-│   ├── embeddings.py # BGE-M3, reranker, cache
-│   ├── fusion.py     # RRF
-│   └── pipeline.py   # RetrievalPipeline
+│   ├── embeddings.py   # BGE-M3, reranker, cache
+│   ├── fusion.py       # RRF
+│   ├── table_expand.py # table_row → parent table context
+│   └── pipeline.py     # RetrievalPipeline
 ├── generation/
 │   ├── llm.py        # OpenAI-compatible client
 │   └── service.py    # QueryService
@@ -143,10 +153,8 @@ src/rag/
 ├── workers/
 │   └── celery_app.py
 ├── db/
-│   ├── models.py     # Group, Document, Chunk, IngestJob
+│   ├── models.py     # Group, Document, Chunk, IngestJob, GlossaryTerm
 │   └── session.py
-├── storage/
-│   └── s3.py
 ├── observability/
 │   ├── logging.py
 │   ├── metrics.py
@@ -161,17 +169,12 @@ src/rag/
 ```mermaid
 flowchart LR
   subgraph entry [진입점]
-    A[POST /v1/documents 원본]
-    B[POST /v1/documents/parsed]
-  end
-
-  subgraph parse [파싱]
-    MD[MarkItDown 이 저장소]
-    Ext[외부 파서]
+    A[POST /v1/documents]
+    B[POST /v1/documents/parse/file]
   end
 
   subgraph load [적재 - 이 저장소]
-    Chunk[Chunk + Embed + Kiwi]
+    Chunk[ParseResponse results chunk + Embed + Kiwi]
   end
 
   subgraph rag_svc [검색]
@@ -179,17 +182,17 @@ flowchart LR
     Query[POST /v1/query]
   end
 
-  PG[(PostgreSQL documents + chunks)]
+  PG[(PostgreSQL parse_json + chunks)]
+  Ext[외부 파서]
 
-  A --> MD --> Chunk
-  Ext -->|Markdown| B --> Chunk
+  Ext -->|ParseResponse| A --> Chunk
+  B -->|ParseResponse JSON| Chunk
   Chunk --> PG
   Retrieve --> PG
   Query --> Retrieve
 ```
 
-- 경로 A: 원본 → MarkItDown → 공통 적재
-- 경로 B: 외부 Markdown → 공통 적재 (PG 직접 write 없음)
+- 이 저장소는 PDF/Office 파싱 없음. Parser Service 또는 parse JSON만 수신
 - 검색: `chunks` JOIN `documents` (`filename`, `page`, `group_id`)
 
 계약: [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md)
@@ -198,7 +201,7 @@ flowchart LR
 
 | 확장 | 방법 |
 |------|------|
-| 새 문서 포맷 | 경로 A MarkItDown extras, 또는 경로 B 외부 파서 |
+| 새 문서 포맷 | 외부에서 Markdown으로 변환 후 업로드 |
 | 새 embedding 모델 | `EMBEDDING_MODEL` env + `vector(N)` dimension 변경 |
 | LLM provider 교체 | `LLM_BASE_URL` + `LLM_API_KEY` |
 | Tenant 격리 | `group_id` 정확 일치 (현재) → schema-per-tenant (Phase 2) |

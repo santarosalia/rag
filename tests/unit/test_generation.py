@@ -67,6 +67,29 @@ def test_build_context_numbering():
     assert "page 3" in context
 
 
+def test_build_context_prepends_glossary():
+    citations = [
+        Citation(
+            chunk_id="1",
+            doc_id="d1",
+            filename="doc.pdf",
+            page=1,
+            score=0.9,
+            snippet="body",
+            rank=1,
+            content="chunk body",
+        ),
+    ]
+    context = build_context(
+        citations,
+        max_tokens=4096,
+        glossary_text="[Glossary]\n- KOBACO: 방송광고 판매 대행\n",
+    )
+    assert context.index("[Glossary]") < context.index("[1]")
+    assert "KOBACO" in context
+    assert "chunk body" in context
+
+
 class _FakeResponse:
     def raise_for_status(self) -> None:
         return None

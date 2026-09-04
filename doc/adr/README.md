@@ -24,7 +24,7 @@
 | [0005](0005-celery-redis-async-ingestion.md) | Celery + Redis 비동기 인제스트 | Accepted |
 | [0006](0006-openai-compatible-llm-api.md) | OpenAI-compatible LLM API | Accepted |
 | [0007](0007-groups-tree-replaces-tenant-id.md) | tenant_id를 그룹 트리로 교체 | Superseded by 0009 |
-| [0008](0008-parse-boundary-dual-ingest-entry.md) | 파싱 경계와 이중 인제스트 진입점 | Accepted |
+| [0008](0008-parse-boundary-dual-ingest-entry.md) | 파싱 경계 (Markdown-only로 supersede) | Superseded |
 | [0009](0009-flat-groups-caller-defined-id.md) | 평면 그룹 + 호출측 문자열 ID | Accepted |
 
 ## 관련 문서

@@ -12,6 +12,8 @@ services:
       - ./configs:/app/configs
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
+      - ./scripts:/app/scripts
+      - ./ad_glossary_v1.0_20260828.csv:/app/ad_glossary_v1.0_20260828.csv:ro
     command: >
       uvicorn rag.api.main:app
       --host 0.0.0.0
@@ -26,6 +28,8 @@ services:
       - ./configs:/app/configs
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
+      - ./scripts:/app/scripts
+      - ./ad_glossary_v1.0_20260828.csv:/app/ad_glossary_v1.0_20260828.csv:ro
     command:
       - watchfiles
       - --filter

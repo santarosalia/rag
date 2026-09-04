@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_serializer
 
 from rag.groups.ids import GROUP_ID_MAX_LENGTH, GROUP_ID_PATTERN_STR
+from rag.models.parse import ParseResponse
 
 GroupId = Annotated[
     str,
@@ -32,6 +33,7 @@ class DocumentUploadResponse(BaseModel):
     job_id: UUID
     status: DocumentStatus
     message: str = "Document queued for ingestion"
+    parse: ParseResponse | None = None
 
 
 class DocumentResponse(BaseModel):
@@ -44,13 +46,6 @@ class DocumentResponse(BaseModel):
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
-
-
-class ParsedDocumentRequest(BaseModel):
-    group_id: GroupId
-    filename: str = Field(..., min_length=1, max_length=512)
-    markdown: str = Field(..., max_length=5_000_000)
-    content_type: str | None = Field(default=None, max_length=128)
 
 
 class RetrieveRequest(BaseModel):
@@ -115,6 +110,7 @@ class QueryRequest(BaseModel):
     include_citations: bool = True
     snippet: bool = True
     content: bool = False
+    include_glossary_definitions: bool = False
 
 
 class QueryResponse(BaseModel):
@@ -152,3 +148,35 @@ class GroupDocumentItem(BaseModel):
     status: DocumentStatus
     chunk_count: int
     created_at: datetime
+
+
+class GlossaryCreate(BaseModel):
+    id: str = Field(..., min_length=1, max_length=64)
+    standard_term: str = Field(..., min_length=1, max_length=256)
+    synonyms: list[str] = Field(default_factory=list)
+    category: str | None = Field(default=None, max_length=128)
+    definition: str | None = None
+    enabled: bool = True
+
+
+class GlossaryUpdate(BaseModel):
+    standard_term: str | None = Field(default=None, min_length=1, max_length=256)
+    synonyms: list[str] | None = None
+    category: str | None = Field(default=None, max_length=128)
+    definition: str | None = None
+    enabled: bool | None = None
+
+
+class GlossaryResponse(BaseModel):
+    id: str
+    standard_term: str
+    synonyms: list[str]
+    category: str | None = None
+    definition: str | None = None
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class GlossaryReloadResponse(BaseModel):
+    surfaces: int

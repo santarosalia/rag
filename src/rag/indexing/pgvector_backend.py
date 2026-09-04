@@ -155,6 +155,9 @@ class PgVectorBackend:
                 c.content,
                 d.filename,
                 c.page,
+                c.type,
+                c.chunk_index,
+                c.parent_chunk_id::text AS parent_chunk_id,
                 1 - (c.embedding <=> CAST(:embedding AS vector)) AS score
             FROM chunks c
             JOIN documents d ON c.doc_id = d.id
@@ -171,16 +174,31 @@ class PgVectorBackend:
             result = await session.execute(text(sql), params)
             return self._rows_to_hits(result.mappings().all())
 
-    async def bm25_search(
+    async def fts_search(
         self,
         query_text: str,
         k: int = 50,
         group_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        from rag.glossary.expand import build_expanded_tsquery, longest_surface_segments
+        from rag.glossary.store import get_glossary_store
+
         morph = get_morph_analyzer()
-        morph_query = morph.analyze(query_text)
-        if not morph_query.strip():
-            morph_query = query_text
+        store = get_glossary_store()
+        segments = longest_surface_segments(query_text, store)
+        matched = [
+            {"surface": seg, "aliases": sorted(aliases)}
+            for seg, aliases in segments
+            if aliases is not None
+        ]
+        tsquery = build_expanded_tsquery(
+            query_text, store=store, morph=morph, segments=segments
+        )
+        if not tsquery.strip():
+            fallback = morph.analyze(query_text) or query_text
+            tsquery = " & ".join(
+                p for p in fallback.split() if p
+            ) or fallback.replace(" ", " & ")
 
         group_clause, group_params = group_filter_clause(group_id)
 
@@ -191,11 +209,14 @@ class PgVectorBackend:
                 c.content,
                 d.filename,
                 c.page,
-                ts_rank(c.tsv, plainto_tsquery('simple', :morph_query)) AS score
+                c.type,
+                c.chunk_index,
+                c.parent_chunk_id::text AS parent_chunk_id,
+                ts_rank(c.tsv, to_tsquery('simple', :tsquery)) AS score
             FROM chunks c
             JOIN documents d ON c.doc_id = d.id
             WHERE c.tsv IS NOT NULL
-              AND c.tsv @@ plainto_tsquery('simple', :morph_query)
+              AND c.tsv @@ to_tsquery('simple', :tsquery)
               AND d.status = 'completed'
               {group_clause}
             ORDER BY score DESC
@@ -203,10 +224,23 @@ class PgVectorBackend:
         """
 
         async with AsyncSessionLocal() as session:
-            params: dict[str, Any] = {"morph_query": morph_query, "k": k}
+            params: dict[str, Any] = {"tsquery": tsquery, "k": k}
             params.update(group_params)
             result = await session.execute(text(sql), params)
-            return self._rows_to_hits(result.mappings().all())
+            hits = self._rows_to_hits(result.mappings().all())
+
+        logger.info(
+            "sparse_fts_query",
+            query=query_text,
+            group_id=group_id,
+            glossary_surfaces=len(store.surfaces),
+            glossary_matches=matched,
+            tsquery=tsquery,
+            hit_count=len(hits),
+            top_filenames=[h.get("filename", "")[:48] for h in hits[:5]],
+            top_scores=[round(float(h.get("score") or 0), 4) for h in hits[:5]],
+        )
+        return hits
 
     @staticmethod
     def _rows_to_hits(rows: list[Any]) -> list[dict[str, Any]]:
@@ -219,6 +253,9 @@ class PgVectorBackend:
                     "content": row["content"] or "",
                     "filename": row["filename"] or "",
                     "page": row["page"],
+                    "type": row["type"],
+                    "chunk_index": row["chunk_index"],
+                    "parent_chunk_id": row["parent_chunk_id"],
                     "score": float(row["score"] or 0.0),
                     "rank": rank,
                 }

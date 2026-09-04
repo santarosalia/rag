@@ -4,11 +4,11 @@
 > **대상:** 검색 단위(child)와 생성 단위(parent) 분리 + 거대 표만 행 그룹 child  
 > **버전:** 0.4.0  
 > **작성일:** 2026-08-27  
-> **상태:** 구현 대상
+> **상태:** 초안(폐기 예정). `SemanticChunker`는 제거됨. 현행은 [`CHUNKING.md`](CHUNKING.md) (`parse_items` + `table_row`/`parent_chunk_id`).
 
 관련: [`CHUNKING.md`](CHUNKING.md) (현재 구현) · [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-현재 청커는 헤딩·표·펜스 경계를 지키되 **한 행이 검색·생성에 같이 쓰인다.** 이 문서는 그 다음 단계다. 구현 후 `CHUNKING.md`가 실행 규칙의 소스가 된다.
+아래는 2026-08 시점 SemanticChunker 확장 초안이다. 실행 규칙은 `CHUNKING.md`를 본다.
 
 ---
 
@@ -177,7 +177,7 @@ chunks
 
 ## 7. 검색 · 생성
 
-`knn_search` / `bm25_search` WHERE에 `c.role = 'child'` (및 기존 `embedding`/`tsv` NOT NULL, `documents.status = 'completed'`).
+`knn_search` / `fts_search` WHERE에 `c.role = 'child'` (및 기존 `embedding`/`tsv` NOT NULL, `documents.status = 'completed'`).
 
 rerank 입력은 **child `content`**. 부모로 rerank하면 큰 표 윈도우가 서로 비슷해진다.
 
