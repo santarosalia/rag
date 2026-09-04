@@ -2,8 +2,8 @@
 
 - **상태:** Superseded
 - **날짜:** 2026-08-27
-- **관련:** [GROUP_TREE_PLANNING.md](../GROUP_TREE_PLANNING.md), ADR-0002
-- **대체:** [ADR-0009](0009-flat-groups-caller-defined-id.md) — 평면 그룹 + 호출측 문자열 ID
+- **관련:** ADR-0002
+- **대체:** [ADR-0009](0009-flat-groups-caller-defined-id.md) — 평면 그룹 + 호출측 문자열 ID. 그룹 트리는 채택하지 않음.
 
 ## 맥락
 

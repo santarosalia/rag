@@ -1,14 +1,12 @@
 # 그룹(평면) 문서 관리 기획서
 
 > **프로젝트명:** Hybrid RAG Platform  
-> **대상:** 그룹 트리 → **평면 `groups` + 호출측이 지정하는 문자열 ID**  
+> **대상:** 평면 `groups` + 호출측이 지정하는 문자열 ID  
 > **버전:** 0.3.0  
 > **작성일:** 2026-08-27  
-> **상태:** 구현 대상 (ADR-0009)
+> **상태:** 구현됨 (ADR-0009). **그룹 트리는 구현하지 않음.**
 
 관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`CHUNKING.md`](CHUNKING.md) · [`ADR-0009`](adr/0009-flat-groups-caller-defined-id.md)
-
-트리 시절 기획은 [`GROUP_TREE_PLANNING.md`](GROUP_TREE_PLANNING.md) (superseded).
 
 ---
 
