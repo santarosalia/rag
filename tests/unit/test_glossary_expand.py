@@ -9,7 +9,6 @@ from rag.glossary.csv_io import parse_glossary_csv
 from rag.glossary.expand import (
     build_expanded_tsquery,
     longest_surface_segments,
-    morph_lexemes,
     sanitize_lexeme,
 )
 from rag.glossary.store import GlossaryStore

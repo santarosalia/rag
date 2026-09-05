@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from html.parser import HTMLParser
-from typing import List, Optional
 
 
 class _RowParser(HTMLParser):
@@ -16,8 +15,8 @@ class _RowParser(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__()
-        self.rows: List[List[tuple]] = []
-        self._cur: List[tuple] = []
+        self.rows: list[list[tuple]] = []
+        self._cur: list[tuple] = []
         self._buf: str = ""
         self._in_cell: bool = False
         self._rspan: int = 1
@@ -97,7 +96,7 @@ def html_table_to_markdown(html_str: str) -> str:
 
     n_cols = max(sum(cs for _, _, cs in row) for row in parsed_rows)
     n_rows = len(parsed_rows)
-    grid: List[List[Optional[str]]] = [[None] * n_cols for _ in range(n_rows)]
+    grid: list[list[str | None]] = [[None] * n_cols for _ in range(n_rows)]
 
     for r_idx, row_cells in enumerate(parsed_rows):
         c_idx = 0
@@ -113,11 +112,11 @@ def html_table_to_markdown(html_str: str) -> str:
                         grid[tr][tc] = text
             c_idx += cspan
 
-    def esc_cell(s: Optional[str]) -> str:
+    def esc_cell(s: str | None) -> str:
         s = s or ""
         return s.replace("|", "\\|").replace("\n", " ")
 
-    def fmt_row(row: List[Optional[str]]) -> str:
+    def fmt_row(row: list[str | None]) -> str:
         return "| " + " | ".join(esc_cell(c) for c in row) + " |"
 
     sep = "| " + " | ".join(["---"] * n_cols) + " |"

@@ -43,9 +43,10 @@ async def test_upload_requires_group_id(app):
 async def test_parse_file_requires_group_id(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = b'[{"id":"1","type":"text","markdown":"hi","prov":[]}]'
         response = await client.post(
             "/v1/documents/parse/file",
-            files={"file": ("note.json", b'[{"id":"1","type":"text","markdown":"hi","prov":[]}]', "application/json")},
+            files={"file": ("note.json", payload, "application/json")},
         )
         assert response.status_code == 400
         assert "group_id" in response.json()["detail"]

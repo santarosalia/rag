@@ -31,7 +31,8 @@ ROWSPAN_HTML = (
     "</tr>"
     "<tr>"
     "<td style='text-align: center; word-wrap: break-word;'>대한무역투자진흥공사</td>"
-    "<td style='text-align: center; word-wrap: break-word;'>이영일 팀장<br>※평가위원및일정은상황따라변동가능</td>"
+    "<td style='text-align: center; word-wrap: break-word;'>"
+    "이영일 팀장<br>※평가위원및일정은상황따라변동가능</td>"
     "</tr>"
     "</table>"
 )

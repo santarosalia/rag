@@ -11,8 +11,8 @@ from rag.db.models import DocumentStatus as DBDocumentStatus
 from rag.db.session import get_db
 from rag.generation.service import QueryService
 from rag.groups.service import require_group, resolve_search_group
-from rag.ingestion.parser_client import ParserClient, ParserError
 from rag.ingestion.parse_items import load_parse_response
+from rag.ingestion.parser_client import ParserClient, ParserError
 from rag.ingestion.pipeline import create_document_record
 from rag.models.parse import ParseResponse
 from rag.models.schemas import (
