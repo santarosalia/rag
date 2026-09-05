@@ -53,7 +53,7 @@ def _bbox_of(item: ResultItem) -> dict[str, Any] | None:
     bbox = item.prov[0].bbox
     if bbox is None:
         return None
-    return bbox.model_dump(mode="json")
+    return bbox.model_dump(mode="json", by_alias=True)
 
 
 def _is_table_item(item_type: str, markdown: str) -> bool:

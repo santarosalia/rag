@@ -2,16 +2,18 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BoundingBox(BaseModel):
     """Bounding box with coordinate origin."""
 
-    l: float = 0.0
-    t: float = 0.0
-    r: float = 0.0
-    b: float = 0.0
+    model_config = ConfigDict(populate_by_name=True)
+
+    left: float = Field(default=0.0, alias="l")
+    top: float = Field(default=0.0, alias="t")
+    right: float = Field(default=0.0, alias="r")
+    bottom: float = Field(default=0.0, alias="b")
     coord_origin: str = "TOPLEFT"
 
 

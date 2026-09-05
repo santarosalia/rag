@@ -1,3 +1,5 @@
+import pytest
+
 from rag.models.parse import ParseResponse, ResultItem
 
 
@@ -23,8 +25,5 @@ def test_parse_response_joins_result_markdown():
 
 def test_parse_response_rejects_empty_markdown():
     resp = ParseResponse(status="SUCCESS", results=[])
-    try:
+    with pytest.raises(ValueError):
         resp.markdown_text()
-        assert False, "expected ValueError"
-    except ValueError:
-        pass

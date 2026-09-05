@@ -26,7 +26,10 @@ class ParserClient:
     ) -> None:
         settings = get_settings()
         self.base_url = (base_url or settings.parse_api_base_url).rstrip("/")
-        self.timeout = timeout_seconds if timeout_seconds is not None else settings.parse_api_timeout_seconds
+        if timeout_seconds is not None:
+            self.timeout = timeout_seconds
+        else:
+            self.timeout = settings.parse_api_timeout_seconds
 
     async def parse(
         self,
