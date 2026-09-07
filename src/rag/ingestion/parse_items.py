@@ -213,9 +213,15 @@ def _append_chunk(
     searchable: bool = True,
     parent_chunk_index: int | None = None,
 ) -> int:
-    """Append one or more chunks; return next chunk_index."""
+    """Append one or more chunks; return next chunk_index.
+
+    Non-searchable chunks (expand-only parent tables) are never split by
+    ``max_tokens`` so ``parent_chunk_id`` points at the full table.
+    Generation still truncates via ``build_context``.
+    """
     token_count = len(encoding.encode(content))
-    if token_count <= max_tokens:
+    # Expand-only parents must stay whole; row children all link to this index.
+    if not searchable or token_count <= max_tokens:
         chunks.append(
             TextChunk(
                 content=content,
@@ -293,7 +299,7 @@ def results_to_chunks(
             pending_heading = None
             row_bodies = _split_table_rows(md)
             parent_index = chunk_index
-            # Row-split 시 원본은 컨텍스트 expand 전용(검색 제외)
+            # Row-split: original is expand-only (not searchable, not max_tokens-split)
             chunk_index = _append_chunk(
                 chunks,
                 content=original,
