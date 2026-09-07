@@ -14,7 +14,8 @@ models:
   reranker: "BAAI/bge-reranker-v2-m3"
   embedding_dimension: 1024
   reranker_batch_size: 16
-  device: "cuda"
+  # Used only when TEI_*_URL is unset (local sentence-transformers fallback)
+  device: "cpu"
 
 llm:
   provider: "vllm"

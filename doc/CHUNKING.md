@@ -74,7 +74,8 @@ flowchart LR
 | 파이프 MD | 헤더줄 + 구분선(`\|---\|`) 제외한 데이터행 → 각 `헤더\n데이터행` |
 | HTML fallback | 아직 `<tr>`면 셀 텍스트로 행 조립(정규화 실패 대비) |
 | 검색 플래그 | 행이 생기면 원본 `searchable=false`, 각 행 `searchable=true` · `type=table_row` · `parent_chunk_index=부모 chunk_index` |
-| 행 1개 이하 | split 없음 → 원본만, `searchable=true` |
+| 부모 분할 | expand 전용 원본(`searchable=false`)은 **`max_tokens`로 쪼개지 않음** (잘린 첫 조각만 부모가 되는 문제 방지). 생성 컨텍스트는 `build_context`가 자름 |
+| 행 1개 이하 | split 없음 → 원본만, `searchable=true` (이때만 oversized면 기존처럼 분할) |
 | page/bbox | 행 = 부모와 동일 |
 
 DB에는 `parent_chunk_id` FK(`chunks.id` → `chunks.id`, CASCADE). 청킹 단계의 `parent_chunk_index`는 ingest 중 UUID 매핑용 임시 링크.

@@ -44,6 +44,29 @@ def test_single_row_table_remains_searchable():
     assert chunks[0].parent_chunk_index is None
 
 
+def test_oversized_parent_table_not_split_by_max_tokens():
+    """Expand-only parent must stay one chunk so rows keep full-table content."""
+    cell = "세율 상세 설명 " * 80
+    rows = "\n".join(f"| 시세 | 세목{i} | {cell} | 납기 |" for i in range(12))
+    table = (
+        "| 구분 | 세목 | 부과개요 | 납기 |\n"
+        "| --- | --- | --- | --- |\n"
+        f"{rows}"
+    )
+    chunks = results_to_chunks(
+        [_item(item_type="table", markdown=table)],
+        max_tokens=64,
+    )
+    parents = [c for c in chunks if c.type == "table"]
+    rows_out = [c for c in chunks if c.type == "table_row"]
+    assert len(parents) == 1
+    assert parents[0].searchable is False
+    assert parents[0].token_count > 64
+    assert "세목11" in parents[0].content
+    assert len(rows_out) >= 2
+    assert all(c.parent_chunk_index == parents[0].chunk_index for c in rows_out)
+
+
 def test_expand_collapses_rows_to_parent_table():
     parent = TextChunk(
         content="| 항목 | 값 |\n| --- | --- |\n| 담당 | 홍길동 |\n| 기간 | 3개월 |",

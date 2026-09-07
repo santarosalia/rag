@@ -11,12 +11,14 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 | 기능 | 설명 |
 |------|------|
 | **Hybrid Search** | pgvector kNN(BGE-M3) + PostgreSQL FTS(Kiwi) → RRF 융합 |
+| **Glossary** | 전역 `glossary_terms`. Sparse 동의어 OR 확장. query 시 definition은 `include_glossary_definitions`(기본 false) |
 | **Rerank** | Cross-encoder `bge-reranker-v2-m3` (top-50 → top-5) |
-| **Citation** | chunk_id, filename, page. `/v1/query`·`/v1/retrieve` body `snippet`/`content`(bool)로 본문 필드 선택. 기본 snippet만 |
+| **Citation** | chunk_id, filename, page. `/v1/query`·`/v1/retrieve` body `snippet`/`content`(bool). 기본 snippet만 |
+| **Tables** | HTML→MD, 원본+`table_row`, 검색 후 `parent_chunk_id`로 표 expand |
 | **Groups** | 평면 문서 그룹. 생성 시 외부 문자열 ID 지정 가능 |
 | **Async Ingest** | `POST /v1/documents` → Parser Service → `parse_json` → results 단위 chunk/embed |
-| **Single DB** | 메타데이터 + ParseResponse + 벡터 + FTS 모두 PostgreSQL |
-| **Observability** | Prometheus, structlog, OpenTelemetry |
+| **Single DB** | 메타데이터 + ParseResponse + 벡터 + FTS + 용어집 모두 PostgreSQL |
+| **Observability** | Prometheus, structlog (`ensure_ascii=False`), OpenTelemetry |
 
 ---
 
@@ -25,7 +27,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 ```
 Source Upload → Parser Service (/parse) → ParseResponse → results chunk → Embedding + Kiwi → PostgreSQL
                                                                               ↓
-Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citations
+Query → Dense kNN ∥ FTS(glossary OR + Kiwi) → RRF → Rerank → table expand → LLM → Answer + Citations
 ```
 
 | Component | Technology |
@@ -46,8 +48,11 @@ Query → Dense kNN + FTS Sparse → RRF → Rerank → LLM → Answer + Citatio
 
 ```bash
 cp .env.example .env
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 docker compose exec api alembic upgrade head
+# (선택) 광고 용어집 시드
+DATABASE_URL=postgresql+asyncpg://rag:rag@127.0.0.1:5432/rag \
+  uv run python scripts/seed_glossary.py
 ```
 
 ```bash
@@ -74,7 +79,7 @@ curl -X POST http://localhost:8000/v1/retrieve \
 # RAG
 curl -X POST http://localhost:8000/v1/query \
   -H "Content-Type: application/json" \
-  -d '{"query": "질의"}'
+  -d '{"query": "질의", "group_id": "ga", "include_glossary_definitions": false}'
 ```
 
 ---
@@ -92,7 +97,9 @@ curl -X POST http://localhost:8000/v1/query \
 | `POST /v1/documents/parse/file` | ParseResponse JSON 또는 ResultItem[] 직적재 |
 | `GET /v1/documents/{id}` | 인덱싱 상태 (`group_id`) |
 | `POST /v1/retrieve` | hybrid/dense/sparse 검색 |
-| `POST /v1/query` | 검색 + LLM 답변 |
+| `POST /v1/query` | 검색 + LLM. `include_glossary_definitions`(기본 false) |
+| `GET/POST/PATCH/DELETE /v1/glossary` | 용어집 CRUD |
+| `POST /v1/glossary/reload` | 프로세스 메모리 용어집 맵 갱신 |
 | `/health`, `/ready`, `/metrics` | 운영 |
 
 응답 `backend` 필드는 항상 `"pgvector"`입니다.
