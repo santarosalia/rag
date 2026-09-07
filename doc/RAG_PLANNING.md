@@ -1,9 +1,11 @@
 # RAG 시스템 기획서
 
 > **프로젝트명:** Hybrid RAG Platform  
-> **버전:** 0.3.0  
-> **최종 수정:** 2026-08-27  
-> **상태:** Phase 1 구현 완료 (pgvector + Kiwi FTS, 평면 그룹)
+> **버전:** 0.4.0  
+> **최종 수정:** 2026-09-07  
+> **상태:** Phase 1 구현 완료 (pgvector + Kiwi FTS, 평면 그룹, 용어집 Sparse 확장, ParseResponse 청킹)
+
+실행 상세는 [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`CHUNKING.md`](CHUNKING.md) · [`KIWI.md`](KIWI.md)를 우선한다.
 
 ---
 
@@ -34,16 +36,16 @@
 
 ### 1.4 파싱 경계 (적재는 이 저장소)
 
-Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적재·검색은 **본 저장소**가 담당한다. **원본 파싱(PDF/OCR 등)은 하지 않는다** — UTF-8 Markdown만 받는다.
+Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적재·검색은 **본 저장소**가 담당한다.  
+**원본 PDF/Office 파싱은 Parser Service**에 위임하고, 본문은 `documents.parse_json`에 둔다 (S3 없음).
 
 | API | 입력 |
 |-----|------|
-| `POST /v1/documents` | Markdown 파일 |
 | `POST /v1/documents` | 원본 → Parser Service → parse_json |
 | `POST /v1/documents/parse/file` | ParseResponse / ResultItem[] |
 
 외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다.  
-→ 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md) (Superseded → Markdown-only)
+→ 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [ADR-0008](adr/0008-parse-boundary-dual-ingest-entry.md)
 
 ---
 
@@ -74,8 +76,8 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
         ▼                                │
 ┌───────────────────────────────────────────────────┐
 │                   Storage Layer                    │
-│  PostgreSQL (metadata + pgvector + FTS)            │
-│  MinIO/S3 (originals)  │  Redis (cache/queue)     │
+│  PostgreSQL (metadata + parse_json + pgvector + FTS + glossary) │
+│  Redis (cache/queue)                               │
 └───────────────────────────────────────────────────┘
 ```
 
@@ -87,8 +89,7 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 | Queue | Celery + Redis | 검증된 비동기 작업 큐, retry/DLQ 지원 |
 | Search | PostgreSQL 16 + pgvector | HNSW kNN + GIN FTS 단일 DB 운영 |
 | Sparse | Kiwi (`kiwipiepy`) + tsvector | 한국어 형태소 분석, `simple` tsconfig |
-| Metadata DB | PostgreSQL 16 | ACID, 문서/청크/잡 상태 + 검색 인덱스 통합 |
-| Object Storage | MinIO / S3 | 원본 파일 보존, reindex 시 재처리 |
+| Metadata DB | PostgreSQL 16 | ACID, 문서/청크/잡/용어집 + 검색 인덱스 통합 |
 | Embedding | BAAI/bge-m3 | 다국어, 1024-dim, self-host 비용 통제 |
 | Reranker | BAAI/bge-reranker-v2-m3 | Cross-encoder, 한영 혼합 문서 강점 |
 | LLM | OpenAI-compatible API | 설정으로 provider 교체 가능 |
@@ -111,18 +112,17 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 ### 3.1 흐름
 
 ```
-Upload (UTF-8 Markdown) → S3 저장 → Celery Job
-       → Semantic Chunker → Embedding (BGE-M3) + Kiwi morph → PostgreSQL chunks 갱신
-       → PostgreSQL documents 상태 갱신
+Upload → Parser Service 또는 parse JSON → documents.parse_json
+       → Celery → results[] chunk (CHUNKING.md) → Embedding + Kiwi → chunks 갱신
+       → documents 상태 completed
 ```
 
 ### 3.2 지원 문서 포맷
 
-**Markdown만.** PDF/Office 파싱은 외부. 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md).
+원본은 Parser Service. ParseResponse JSON 직적재 가능. 상세: [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md).
 
 | API | 입력 |
 |-----|------|
-| `POST /v1/documents` | Markdown 파일 |
 | `POST /v1/documents` | 원본 → Parser Service → parse_json |
 | `POST /v1/documents/parse/file` | ParseResponse / ResultItem[] |
 
@@ -148,12 +148,15 @@ Upload (UTF-8 Markdown) → S3 저장 → Celery Job
 |------|------|------|
 | id | UUID | 청크 고유 ID |
 | doc_id | UUID | 문서 FK |
-| content | text | 원문 (LLM 컨텍스트 전문, API snippet은 미리보기) |
-| content_morph | text | Kiwi 형태소 분석 결과 |
+| content | text | 원문 (LLM 컨텍스트 전문) |
+| content_morph | text | Kiwi 형태소 |
 | embedding | vector(1024) | Dense kNN (HNSW) |
-| tsv | tsvector | FTS sparse 검색 (GIN) |
+| tsv | tsvector | FTS (`to_tsquery` / GIN) |
+| type | string? | `table_row` 등 |
+| bbox | jsonb? | 레이아웃 bbox |
+| parent_chunk_id | uuid? | table_row → 부모 표 |
 | page | int? | citation |
-| group_id | string | 검색 필터 (문서 소속 복제) |
+| group_id | string | 검색 필터 |
 
 ### 3.5 Idempotency
 
@@ -169,15 +172,18 @@ Upload (UTF-8 Markdown) → S3 저장 → Celery Job
 ```
 Query
   │
-  ├─► [1] Dense kNN ──────► top-50 (pgvector, BGE-M3 embedding)
+  ├─► [1] Dense kNN ──────► top-50 (pgvector, BGE-M3; 원문 쿼리)
   │
-  ├─► [2] FTS Sparse ─────► top-50 (Kiwi morph + ts_rank)
+  ├─► [2] FTS Sparse ─────► top-50 (용어집 OR 확장 + Kiwi + to_tsquery/ts_rank)
   │
-  ├─► [3] RRF Fusion ─────► merged top-50 (k=60)
+  ├─► [3] RRF Fusion ─────► merged (k=60)
   │
-  ├─► [4] Cross-encoder ──► top-5 (bge-reranker-v2-m3)
+  ├─► [4] Cross-encoder ──► top-5
   │
-  └─► [5] LLM Generate ───► Answer + Citations
+  ├─► [5] table_row expand ► parent_chunk_id 부모 표
+  │
+  └─► [6] LLM Generate ───► Answer + Citations
+       (± include_glossary_definitions → [Glossary] 블록)
 ```
 
 ### 4.2 Dense Retrieval (의미 검색)
@@ -189,8 +195,9 @@ Query
 
 ### 4.3 Sparse Retrieval (키워드 검색)
 
-- **알고리즘:** PostgreSQL FTS — `ts_rank` + `plainto_tsquery('simple', …)`
-- **형태소:** Kiwi (`kiwipiepy`) — 쿼리·문서 모두 `content_morph` 경유
+- **알고리즘:** PostgreSQL FTS — `ts_rank` + `to_tsquery('simple', …)` (`fts_search`)
+- **형태소:** Kiwi — 문서 ingest·쿼리 alias 모두 기본 `Kiwi()` (사용자 사전 일괄 등록 없음)
+- **용어집:** `glossary_terms` surface longest-match → 동의어 lexeme OR 그룹 ([`KIWI.md`](KIWI.md))
 - **인덱스:** GIN on `tsv`
 - **적합 쿼리:** 고유명사, 코드, 숫자, 정확한 용어
 
@@ -215,7 +222,8 @@ score(chunk) = Σ  1 / (k + rank_i)
 ### 4.6 Generation (LLM)
 
 - **Provider:** OpenAI-compatible API (설정 교체 가능)
-- **Context budget:** 4096 tokens (tiktoken `cl100k_base`). 청크 **전문**을 순위대로 넣고 넘치면 마지막만 자른다. API는 `snippet`(미리보기 300자, 기본 on) / `content`(전문, 기본 off) boolean으로 응답 필드를 고른다.
+- **Context budget:** 4096 tokens (tiktoken `cl100k_base`). 청크 **전문**을 순위대로 넣고 넘치면 마지막만 자른다. API는 `snippet`/`content` boolean으로 응답 필드를 고른다.
+- **Glossary (optional):** `include_glossary_definitions=true`면 매칭 용어 definition을 컨텍스트 앞에 붙인다 (기본 false).
 - **Citation format:** `[1]`, `[2]` — context 번호와 매칭
 - **System prompt:** context 기반 답변, 정보 부족 시 명시, 질문 언어로 답변
 
@@ -244,8 +252,10 @@ score(chunk) = Σ  1 / (k + rank_i)
 | POST | `/v1/documents/parse/file` | ParseResponse JSON | 없음 |
 | GET | `/v1/documents/{id}` | 문서/인덱싱 상태 조회 | 없음 |
 | DELETE | `/v1/documents/{id}` | 소프트 삭제 + 검색 필드 NULL | 없음 |
+| GET/POST/PATCH/DELETE | `/v1/glossary` | 용어집 CRUD | 없음 |
+| POST | `/v1/glossary/reload` | 메모리 용어집 맵 갱신 | 없음 |
 | POST | `/v1/retrieve` | 검색만 (LLM 없음). `group_id` 선택 | 없음 |
-| POST | `/v1/query` | Hybrid search + generate. 동일 그룹 필터 | 없음 |
+| POST | `/v1/query` | Hybrid search + generate. `include_glossary_definitions` | 없음 |
 | GET | `/health` | Liveness | 없음 |
 | GET | `/ready` | Readiness (PG/Redis/pgvector) | 없음 |
 | GET | `/metrics` | Prometheus | 없음 |
@@ -261,7 +271,8 @@ score(chunk) = Σ  1 / (k + rank_i)
   "group_id": "ga",
   "top_k": 5,
   "snippet": true,
-  "content": false
+  "content": false,
+  "include_glossary_definitions": false
 }
 
 // Response
@@ -358,7 +369,7 @@ deploy/k8s/rag.yaml
 
 ### 8.3 Reindex (Zero-downtime)
 
-1. Celery worker로 전체 문서 re-ingest (S3 원본 재처리)
+1. Celery worker로 전체 문서 re-ingest (`parse_json` 기준 재청킹·재임베딩)
 2. `chunks` 행별 embedding / content_morph / tsv 갱신
 3. `documents.status` 및 `chunk_count` 검증
 4. 필요 시 `REINDEX INDEX CONCURRENTLY` (HNSW/GIN)
@@ -441,5 +452,6 @@ CI에서 Recall@5, MRR threshold gate.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 컴포넌트 다이어그램, chunks 스키마
 - [adr/](adr/) — Architecture Decision Records
 - [PARSE_BOUNDARY.md](PARSE_BOUNDARY.md) — 파싱 경계, 이중 진입점, 적재 계약
-- [CHUNKING.md](CHUNKING.md) — Semantic Chunker 분할 규칙 (현재 구현)
+- [CHUNKING.md](CHUNKING.md) — ParseResponse results 청킹 (현재 구현)
+- [KIWI.md](KIWI.md) — Kiwi FTS + 용어집 Sparse 확장
 - [PARENT_CHILD_PLANNING.md](PARENT_CHILD_PLANNING.md) — parent-child · 표 행 단위 (구현 대상)

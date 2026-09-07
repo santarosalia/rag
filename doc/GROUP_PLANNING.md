@@ -6,7 +6,7 @@
 > **작성일:** 2026-08-27  
 > **상태:** 구현됨 (ADR-0009). **그룹 트리는 구현하지 않음.**
 
-관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`CHUNKING.md`](CHUNKING.md) · [`ADR-0009`](adr/0009-flat-groups-caller-defined-id.md)
+관련: [`RAG_PLANNING.md`](RAG_PLANNING.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`PARSE_BOUNDARY.md`](PARSE_BOUNDARY.md) · [`CHUNKING.md`](CHUNKING.md) · [`KIWI.md`](KIWI.md) · [`ADR-0009`](adr/0009-flat-groups-caller-defined-id.md)
 
 ---
 

@@ -58,7 +58,7 @@ Query (원문)
         → to_tsquery('simple', "(a|b) & c & ...")
 ```
 
-Dense/rerank는 원문 쿼리 유지. Sparse는 Postgres **`ts_rank` FTS** (`fts_search`).
+Dense/rerank는 원문 쿼리 유지. Sparse는 Postgres **`ts_rank` FTS** (`fts_search`). Sparse 요청마다 `sparse_fts_query` 로그(query, glossary_matches, tsquery, hit_count).
 
 `POST /v1/query`의 `include_glossary_definitions`(default **false**): true면 질의에서 매칭된 용어의 `definition`만 LLM 컨텍스트 앞에 `[Glossary]` 블록으로 붙인다.
 
@@ -79,5 +79,5 @@ searchable 청크만 embed + Kiwi → `content_morph` / `tsv`. 용어집 변경�
 | `glossary/expand.py` | longest-match + OR tsquery |
 | `glossary/csv_io.py` / `scripts/seed_glossary.py` | CSV 시드 |
 | `api/glossary.py` | `/v1/glossary` |
-| `indexing/pgvector_backend.py` | FTS에 확장 쿼리 적용 |
+| `indexing/pgvector_backend.py` | `fts_search` + 확장 쿼리 · `sparse_fts_query` 로그 |
 | alembic `012` | `glossary_terms` |
