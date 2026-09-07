@@ -142,6 +142,7 @@ flowchart LR
 | 확장 | 방법 |
 |------|------|
 | 새 문서 포맷 | Parser Service 또는 parse JSON |
+| embedding / rerank | TEI (`TEI_EMBEDDING_URL`, `TEI_RERANKER_URL`); URL 비우면 in-process ST |
 | embedding 모델 | `EMBEDDING_MODEL` + vector dim |
 | LLM | `LLM_BASE_URL` + `LLM_API_KEY` |
 | 용어집 | `/v1/glossary` 또는 CSV 시드 |

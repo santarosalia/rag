@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     embedding_device: str = "cpu"
 
+    # TEI (Text Embeddings Inference). Empty → in-process sentence-transformers.
+    tei_embedding_url: str = ""
+    tei_reranker_url: str = ""
+    tei_timeout_seconds: float = 60.0
+
     parse_api_base_url: str = "http://192.168.14.248:17000"
     parse_api_timeout_seconds: float = 300.0
 
