@@ -50,6 +50,11 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(128))
     parse_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    tag: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    # SQLAlchemy reserves ``metadata`` on DeclarativeBase; DB column stays ``metadata``.
+    document_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSONB, nullable=True
+    )
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(
             DocumentStatus,

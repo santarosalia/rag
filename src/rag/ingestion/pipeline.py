@@ -156,17 +156,25 @@ async def create_document_record(
     content_type: str,
     parse: ParseResponse | dict[str, Any],
     group_id: str,
+    tag: list[str] | str | None = None,
+    document_metadata: dict[str, Any] | None = None,
 ) -> Document:
+    from rag.groups.filter import normalize_tags
+
     if isinstance(parse, ParseResponse):
         parse_json = parse.model_dump(mode="json")
     else:
         parse_json = parse
+
+    tags = normalize_tags(tag)
 
     document = Document(
         filename=filename,
         content_type=content_type,
         parse_json=parse_json,
         group_id=group_id,
+        tag=tags or None,
+        document_metadata=document_metadata,
         status=DocumentStatus.PENDING,
     )
     session.add(document)

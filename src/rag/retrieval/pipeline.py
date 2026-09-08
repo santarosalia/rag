@@ -38,6 +38,7 @@ class RetrievalPipeline:
         query: str,
         mode: SearchMode = SearchMode.HYBRID,
         group_id: str | None = None,
+        tag: list[str] | None = None,
         top_k: int | None = None,
         rerank: bool = True,
     ) -> tuple[list[Citation], dict[str, float]]:
@@ -61,6 +62,7 @@ class RetrievalPipeline:
                 embedding,
                 k=dense_k,
                 group_id=group_id,
+                tag=tag,
             )
             latency["dense_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="dense").observe(latency["dense_ms"] / 1000)
@@ -74,6 +76,7 @@ class RetrievalPipeline:
                 query,
                 k=sparse_k,
                 group_id=group_id,
+                tag=tag,
             )
             latency["sparse_ms"] = (time.perf_counter() - t0) * 1000
             RETRIEVAL_LATENCY.labels(stage="sparse").observe(latency["sparse_ms"] / 1000)

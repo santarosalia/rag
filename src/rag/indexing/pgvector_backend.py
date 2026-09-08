@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag.db.session import AsyncSessionLocal
-from rag.groups.filter import group_filter_clause
+from rag.groups.filter import group_filter_clause, tag_filter_clause
 from rag.indexing.morphology import get_morph_analyzer
 from rag.observability.logging import get_logger
 
@@ -144,9 +144,11 @@ class PgVectorBackend:
         embedding: list[float],
         k: int = 50,
         group_id: str | None = None,
+        tag: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         embedding_literal = "[" + ",".join(str(v) for v in embedding) + "]"
         group_clause, group_params = group_filter_clause(group_id)
+        tag_clause, tag_params = tag_filter_clause(tag)
 
         sql = f"""
             SELECT
@@ -164,6 +166,7 @@ class PgVectorBackend:
             WHERE c.embedding IS NOT NULL
               AND d.status = 'completed'
               {group_clause}
+              {tag_clause}
             ORDER BY c.embedding <=> CAST(:embedding AS vector)
             LIMIT :k
         """
@@ -171,6 +174,7 @@ class PgVectorBackend:
         async with AsyncSessionLocal() as session:
             params: dict[str, Any] = {"embedding": embedding_literal, "k": k}
             params.update(group_params)
+            params.update(tag_params)
             result = await session.execute(text(sql), params)
             return self._rows_to_hits(result.mappings().all())
 
@@ -179,6 +183,7 @@ class PgVectorBackend:
         query_text: str,
         k: int = 50,
         group_id: str | None = None,
+        tag: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         from rag.glossary.expand import build_expanded_tsquery, longest_surface_segments
         from rag.glossary.store import get_glossary_store
@@ -201,6 +206,7 @@ class PgVectorBackend:
             ) or fallback.replace(" ", " & ")
 
         group_clause, group_params = group_filter_clause(group_id)
+        tag_clause, tag_params = tag_filter_clause(tag)
 
         sql = f"""
             SELECT
@@ -219,6 +225,7 @@ class PgVectorBackend:
               AND c.tsv @@ to_tsquery('simple', :tsquery)
               AND d.status = 'completed'
               {group_clause}
+              {tag_clause}
             ORDER BY score DESC
             LIMIT :k
         """
@@ -226,6 +233,7 @@ class PgVectorBackend:
         async with AsyncSessionLocal() as session:
             params: dict[str, Any] = {"tsquery": tsquery, "k": k}
             params.update(group_params)
+            params.update(tag_params)
             result = await session.execute(text(sql), params)
             hits = self._rows_to_hits(result.mappings().all())
 
@@ -233,6 +241,7 @@ class PgVectorBackend:
             "sparse_fts_query",
             query=query_text,
             group_id=group_id,
+            tag=tag,
             glossary_surfaces=len(store.surfaces),
             glossary_matches=matched,
             tsquery=tsquery,

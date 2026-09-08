@@ -18,6 +18,7 @@ class QueryService:
         self,
         query: str,
         group_id: str | None = None,
+        tag: list[str] | None = None,
         top_k: int | None = None,
         *,
         include_glossary_definitions: bool = False,
@@ -25,6 +26,7 @@ class QueryService:
         citations, latency = await self.retrieval.retrieve(
             query=query,
             group_id=group_id,
+            tag=tag,
             top_k=top_k,
             rerank=True,
         )

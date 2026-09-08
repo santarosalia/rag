@@ -44,6 +44,38 @@ def _validate_parse(parse: ParseResponse) -> None:
         raise HTTPException(status_code=400, detail="Parse response has no results")
 
 
+def _parse_metadata_form(raw: str | None) -> dict | None:
+    if raw is None or not str(raw).strip():
+        return None
+    import json
+
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {exc}") from exc
+    if not isinstance(value, dict):
+        raise HTTPException(status_code=400, detail="metadata must be a JSON object")
+    return value
+
+
+def _parse_tag_form(raw: str | None) -> list[str] | None:
+    """Accept JSON array string (``["a","b"]``) or a single tag string."""
+    if raw is None or not str(raw).strip():
+        return None
+    import json
+
+    text = str(raw).strip()
+    if text.startswith("["):
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid tag JSON: {exc}") from exc
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise HTTPException(status_code=400, detail="tag must be a JSON array of strings")
+        return value
+    return [text]
+
+
 async def _run_index(db: AsyncSession, document: Document) -> DocumentUploadResponse:
     try:
         parse = load_parse_response(document.parse_json)
@@ -71,6 +103,8 @@ async def _run_index(db: AsyncSession, document: Document) -> DocumentUploadResp
 async def upload_document_file(
     file: UploadFile = File(...),
     group_id: str | None = Form(default=None),
+    tag: str | None = Form(default=None),
+    metadata: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
     """Upload a source file, parse via Parser Service, then index synchronously."""
@@ -101,6 +135,8 @@ async def upload_document_file(
         content_type=file.content_type or "application/octet-stream",
         parse=parse,
         group_id=group_id.strip(),
+        tag=_parse_tag_form(tag),
+        document_metadata=_parse_metadata_form(metadata),
     )
     return await _run_index(db, document)
 
@@ -138,6 +174,8 @@ async def get_document(
         status=DocumentStatus(document.status.value),
         chunk_count=document.chunk_count,
         group_id=document.group_id,
+        tag=document.tag,
+        metadata=document.document_metadata,
         error_message=document.error_message,
         created_at=document.created_at,
         updated_at=document.updated_at,
@@ -183,6 +221,7 @@ async def retrieve(
             query=request.query,
             mode=request.mode,
             group_id=group_id,
+            tag=request.tag,
             top_k=request.top_k,
             rerank=request.rerank,
         )
@@ -214,6 +253,7 @@ async def query(
         response = await service.query(
             query=request.query,
             group_id=group_id,
+            tag=request.tag,
             top_k=request.top_k,
             include_glossary_definitions=request.include_glossary_definitions,
         )

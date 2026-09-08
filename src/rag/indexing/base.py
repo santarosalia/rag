@@ -25,6 +25,7 @@ class SearchBackend(Protocol):
         embedding: list[float],
         k: int = 50,
         group_id: str | None = None,
+        tag: list[str] | None = None,
     ) -> list[dict[str, Any]]: ...
 
     async def fts_search(
@@ -32,4 +33,5 @@ class SearchBackend(Protocol):
         query_text: str,
         k: int = 50,
         group_id: str | None = None,
+        tag: list[str] | None = None,
     ) -> list[dict[str, Any]]: ...

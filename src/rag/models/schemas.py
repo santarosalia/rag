@@ -43,6 +43,8 @@ class DocumentResponse(BaseModel):
     status: DocumentStatus
     chunk_count: int
     group_id: GroupId
+    tag: list[str] | None = None
+    metadata: dict[str, Any] | None = None
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -52,6 +54,10 @@ class RetrieveRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=4096)
     mode: SearchMode = SearchMode.HYBRID
     group_id: GroupId | None = None
+    tag: list[str] | None = Field(
+        default=None,
+        description="AND filter: document must include every tag",
+    )
     top_k: int | None = Field(default=None, ge=1, le=100)
     rerank: bool = True
     snippet: bool = True
@@ -106,6 +112,10 @@ class RetrieveResponse(BaseModel):
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=4096)
     group_id: GroupId | None = None
+    tag: list[str] | None = Field(
+        default=None,
+        description="AND filter: document must include every tag",
+    )
     top_k: int | None = Field(default=None, ge=1, le=20)
     include_citations: bool = True
     snippet: bool = True
