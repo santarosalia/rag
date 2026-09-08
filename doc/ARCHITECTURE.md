@@ -59,9 +59,9 @@ flowchart TB
 
 ### 인덱싱
 
-1. Client → `POST /v1/documents` (ParseResponse JSON) 또는 `POST /v1/documents/files` (원본 + **필수** `group_id`)
-2. (파일 경로) API → Parser Service → `documents.parse_json`
-3. 같은 요청에서 동기 ingest: `results[]` → [`CHUNKING.md`](CHUNKING.md)
+1. Client → `POST /v1/documents/{id}/index` (`parse_json`) 또는 `POST /v1/documents/files` (원본 + **필수** `group_id`)
+2. (파일 경로) API → Parser Service → `documents` 행 생성(`parse_json`)
+3. 같은 요청(또는 `/index` 재호출)에서 동기 indexing: `results[]` → [`CHUNKING.md`](CHUNKING.md)
 4. 전 청크 INSERT; **searchable**만 TEI embed + Kiwi → `embedding` / `content_morph` / `tsv`
 5. status completed, `chunk_count` 갱신
 
@@ -126,7 +126,7 @@ src/rag/
 flowchart LR
   A[POST /v1/documents/files] --> Ext[Parser Service]
   Ext -->|ParseResponse| Chunk
-  B[POST /v1/documents] -->|JSON| Chunk
+  B[POST /v1/documents/id/index] -->|parse_json| Chunk
   Chunk[results chunk + Embed + Kiwi] --> PG[(PostgreSQL)]
   Q[retrieve / query] --> PG
 ```

@@ -41,7 +41,7 @@ Ingest **전체**를 외부로 빼지 않는다. 청킹·임베딩·Kiwi·PG 적
 
 | API | 입력 |
 |-----|------|
-| `POST /v1/documents` | ParseResponse / ResultItem[] 동기 적재 |
+| `POST /v1/documents/{id}/index` | 기존 행 `parse_json`으로 동기 청크·임베딩 적재 |
 | `POST /v1/documents/files` | 원본 → Parser Service → 동기 적재 |
 
 외부 서비스가 PostgreSQL `chunks`를 직접 쓰지 않는다.  
@@ -123,7 +123,7 @@ Upload → Parser Service 또는 parse JSON → documents.parse_json
 
 | API | 입력 |
 |-----|------|
-| `POST /v1/documents` | ParseResponse / ResultItem[] 동기 적재 |
+| `POST /v1/documents/{id}/index` | 기존 행 `parse_json`으로 동기 청크·임베딩 적재 |
 | `POST /v1/documents/files` | 원본 → Parser Service → 동기 적재 |
 
 ### 3.3 Chunking 전략

@@ -10,24 +10,25 @@
 ## 1. 결론
 
 ```
-원본 PDF/Office                    이미 있는 ParseResponse
+원본 PDF/Office                    이미 DB에 있는 documents 행
     │                                      │
     ▼                                      ▼
-POST /v1/documents/files              POST /v1/documents
+POST /v1/documents/files              POST /v1/documents/{id}/index
     │                                      │
     ▼ Parser Service                       │
-ParseResponse ─────────────────────────────┘
-    │
-    ▼ 동기 ingest
-documents.parse_json → results[] 청킹 → TEI embed → Kiwi → PostgreSQL
+ParseResponse → documents 행 생성          │
+    │                                      │
+    └──────────────┬───────────────────────┘
+                   ▼ 동기 index (parse_json)
+results[] 청킹 → TEI embed → Kiwi → PostgreSQL
 ```
 
 | API | 동작 |
 |-----|------|
-| `POST /v1/documents` | ParseResponse JSON 또는 `ResultItem[]` 직적재 (파서 스킵) |
-| `POST /v1/documents/files` | 원본 파일 → Parser Service → 동기 ingest. 응답에 `parse` |
+| `POST /v1/documents/{id}/index` | `documents.parse_json` 읽어 동기 chunk/embed |
+| `POST /v1/documents/files` | 원본 파일 → Parser Service → 행 생성 → 동기 index |
 
-`group_id` 필수. Celery / `ingest_jobs` 없음.
+`group_id`는 `/documents/files`에서 필수. Celery / `ingest_jobs` 없음.
 
 ---
 
@@ -46,14 +47,10 @@ documents.parse_json → results[] 청킹 → TEI embed → Kiwi → PostgreSQL
 
 청킹은 **`results[]`만** 사용한다. 상세: [`CHUNKING.md`](CHUNKING.md).
 
-`POST /v1/documents` body 예:
+`POST /v1/documents/{id}/index` 예:
 
-```json
-{
-  "group_id": "br",
-  "filename": "manual.pdf",
-  "parse": { "status": "SUCCESS", "results": [ ... ] }
-}
+```bash
+curl -X POST http://localhost:8000/v1/documents/a941cf4c-5025-4e9c-b6d4-7d86bc8d2121/index
 ```
 
 ---

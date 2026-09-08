@@ -17,7 +17,6 @@ from rag.ingestion.parser_client import ParserClient, ParserError
 from rag.ingestion.pipeline import IngestionPipeline, create_document_record
 from rag.models.parse import ParseResponse
 from rag.models.schemas import (
-    DocumentIngestRequest,
     DocumentResponse,
     DocumentStatus,
     DocumentUploadResponse,
@@ -45,24 +44,13 @@ def _validate_parse(parse: ParseResponse) -> None:
         raise HTTPException(status_code=400, detail="Parse response has no results")
 
 
-async def _ingest_parse(
-    db: AsyncSession,
-    *,
-    group_id: str,
-    filename: str,
-    content_type: str,
-    parse: ParseResponse,
-) -> DocumentUploadResponse:
-    await require_group(db, group_id)
+async def _run_index(db: AsyncSession, document: Document) -> DocumentUploadResponse:
+    try:
+        parse = load_parse_response(document.parse_json)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid parse_json: {exc}") from exc
     _validate_parse(parse)
 
-    document = await create_document_record(
-        db,
-        filename=filename,
-        content_type=content_type,
-        parse=parse,
-        group_id=group_id,
-    )
     pipeline = IngestionPipeline()
     try:
         await pipeline.ingest_document(db, document.id)
@@ -74,27 +62,7 @@ async def _ingest_parse(
         doc_id=document.id,
         status=DocumentStatus(document.status.value),
         chunk_count=document.chunk_count,
-        message="Document ingested",
-        parse=parse,
-    )
-
-
-@router.post("/documents", response_model=DocumentUploadResponse)
-async def ingest_parse_document(
-    request: DocumentIngestRequest,
-    db: AsyncSession = Depends(get_db),
-) -> DocumentUploadResponse:
-    """Ingest a Parser Service ParseResponse (or ResultItem[]) — no parse call."""
-    try:
-        parse = load_parse_response(request.parse)
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid parse JSON: {exc}") from exc
-
-    return await _ingest_parse(
-        db,
-        group_id=request.group_id,
-        filename=request.filename.strip(),
-        content_type=request.content_type,
+        message="Document indexed",
         parse=parse,
     )
 
@@ -105,7 +73,7 @@ async def upload_document_file(
     group_id: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
-    """Upload a source file, parse via Parser Service, then ingest synchronously."""
+    """Upload a source file, parse via Parser Service, then index synchronously."""
     if not group_id or not group_id.strip():
         raise HTTPException(status_code=400, detail="group_id is required")
     citation_name = (file.filename or "").strip()
@@ -125,13 +93,32 @@ async def upload_document_file(
     except ParserError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    return await _ingest_parse(
+    _validate_parse(parse)
+    await require_group(db, group_id.strip())
+    document = await create_document_record(
         db,
-        group_id=group_id.strip(),
         filename=citation_name,
         content_type=file.content_type or "application/octet-stream",
         parse=parse,
+        group_id=group_id.strip(),
     )
+    return await _run_index(db, document)
+
+
+@router.post("/documents/{doc_id}/index", response_model=DocumentUploadResponse)
+async def index_document(
+    doc_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUploadResponse:
+    """Build chunks/embeddings from ``documents.parse_json`` for an existing document."""
+    result = await db.execute(select(Document).where(Document.id == doc_id))
+    document = result.scalar_one_or_none()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if document.status == DBDocumentStatus.DELETED:
+        raise HTTPException(status_code=409, detail="Document is deleted")
+
+    return await _run_index(db, document)
 
 
 @router.get("/documents/{doc_id}", response_model=DocumentResponse)

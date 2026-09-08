@@ -84,8 +84,8 @@ chunks.group_id     VARCHAR(128) NOT NULL  FK → groups.id  ON DELETE RESTRICT
 
 | API | `group_id` |
 |-----|------------|
-| `POST /v1/documents` JSON | 필수 |
-| `POST /v1/documents/files` Form | 필수. 없는 그룹 → 400 |
+| `POST /v1/documents/{id}/index` | path `doc_id` (기존 행) |
+| `POST /v1/documents/files` Form | `group_id` 필수. 없는 그룹 → 400 |
 | `GET /v1/documents/{id}` | 응답 `group_id` (path 없음) |
 | `POST /v1/retrieve`, `/v1/query` | 선택. 생략 시 전체, 있으면 `c.group_id = :group_id` |
 

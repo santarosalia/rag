@@ -16,7 +16,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, TEI �
 | **Citation** | chunk_id, filename, page. `/v1/query`·`/v1/retrieve` body `snippet`/`content`(bool). 기본 snippet만 |
 | **Tables** | HTML→MD, 원본+`table_row`, 검색 후 `parent_chunk_id`로 표 expand |
 | **Groups** | 평면 문서 그룹. 생성 시 외부 문자열 ID 지정 가능 |
-| **Sync Ingest** | `POST /v1/documents`(ParseResponse) · `POST /v1/documents/files`(원본→Parser) → 동기 chunk/embed |
+| **Sync Index** | `POST /v1/documents/{id}/index`(parse_json→chunks) · `POST /v1/documents/files`(원본→Parser→index) |
 | **Single DB** | 메타데이터 + ParseResponse + 벡터 + FTS + 용어집 모두 PostgreSQL |
 | **Observability** | Prometheus, structlog (`ensure_ascii=False`), OpenTelemetry |
 
@@ -59,12 +59,10 @@ curl -X POST http://localhost:8000/v1/groups \
   -H "Content-Type: application/json" \
   -d '{"id": "ga"}'
 
-# ParseResponse / ResultItem[] JSON (파서 스킵, 동기 ingest)
-curl -X POST http://localhost:8000/v1/documents \
-  -H "Content-Type: application/json" \
-  -d '{"group_id":"ga","filename":"document.json","parse":{"status":"SUCCESS","results":[]}}'
+# 기존 documents 행 indexing (parse_json → chunks)
+curl -X POST http://localhost:8000/v1/documents/00000000-0000-0000-0000-000000000001/index
 
-# 원본 업로드 (Parser Service → 동기 ingest)
+# 원본 업로드 (Parser Service → 동기 index)
 curl -X POST http://localhost:8000/v1/documents/files \
   -F "file=@document.pdf" \
   -F "group_id=ga"
@@ -91,7 +89,7 @@ curl -X POST http://localhost:8000/v1/query \
 | `GET /v1/groups/{id}` | 단건 |
 | `DELETE /v1/groups/{id}` | 빈 그룹만 삭제 |
 | `GET /v1/groups/{id}/documents` | 소속 문서 |
-| `POST /v1/documents` | ParseResponse JSON / ResultItem[] 동기 적재 |
+| `POST /v1/documents/{id}/index` | 기존 행 `parse_json`으로 동기 청크·임베딩 적재 |
 | `POST /v1/documents/files` | 원본 파일 → Parser Service → 동기 적재 |
 | `GET /v1/documents/{id}` | 인덱싱 상태 (`group_id`) |
 | `POST /v1/retrieve` | hybrid/dense/sparse 검색 |

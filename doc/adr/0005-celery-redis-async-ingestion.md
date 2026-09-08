@@ -16,7 +16,7 @@ API 요청을 동기 blocking하면 timeout·UX 문제가 발생한다.
 
 - Parser / TEI가 외부 I/O라 API `await`로도 다른 요청 처리 가능
 - Celery worker·`ingest_jobs` 운영 비용 대비 이득이 작음
-- 현행: `POST /v1/documents`, `POST /v1/documents/files`에서 **동기 ingest**
+- 현행: `POST /v1/documents/{id}/index`, `POST /v1/documents/files`에서 **동기** indexing
 - Redis는 쿼리 임베딩 캐시용으로만 유지
 
 대체 문서: [`PARSE_BOUNDARY.md`](../PARSE_BOUNDARY.md)

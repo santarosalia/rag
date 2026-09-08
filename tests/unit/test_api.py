@@ -28,17 +28,6 @@ async def test_health_endpoint(app):
 
 
 @pytest.mark.asyncio
-async def test_documents_parse_requires_group_id(app):
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/v1/documents",
-            json={"filename": "a.json", "parse": [{"id": "1", "type": "text", "markdown": "hi"}]},
-        )
-        assert response.status_code == 422
-
-
-@pytest.mark.asyncio
 async def test_documents_files_requires_group_id(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -51,15 +40,26 @@ async def test_documents_files_requires_group_id(app):
 
 
 @pytest.mark.asyncio
-async def test_documents_rejects_invalid_parse_json(app):
+async def test_documents_index_not_found(app):
+    from unittest.mock import AsyncMock, MagicMock
+
+    session = MagicMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=result)
+
+    async def override_get_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/v1/documents",
-            json={"group_id": "ga", "filename": "note.json", "parse": "not-an-object"},
+            "/v1/documents/00000000-0000-0000-0000-000000000001/index",
         )
-        assert response.status_code == 400
-        assert "Invalid parse JSON" in response.json()["detail"]
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

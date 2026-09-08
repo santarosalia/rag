@@ -5,11 +5,11 @@
 
 ## 결정
 
-- `POST /v1/documents` — ParseResponse JSON 또는 `ResultItem[]` → **동기** ingest (`parse_json`)
-- `POST /v1/documents/files` — 원본 → Parser Service → 동기 ingest
+- `POST /v1/documents/{id}/index` — 기존 행의 `parse_json`으로 **동기** chunk/embed
+- `POST /v1/documents/files` — 원본 → Parser Service → 행 생성 → 동기 index
 - 청킹은 `results[]` 단위 (`parse_items.py`). Markdown SemanticChunker·S3·Celery 없음
 
 ## 결과
 
-- 기존 `/v1/documents/parse/file` 클라이언트는 `/v1/documents`로 이전
-- 기존 원본 업로드(`/v1/documents` multipart)는 `/v1/documents/files`로 이전
+- ParseResponse body 직적재는 제거. 외부에서 `documents` 행을 만든 뒤 `/index`로 적재
+- 원본 업로드는 `/v1/documents/files`
