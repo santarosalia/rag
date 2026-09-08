@@ -15,8 +15,6 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
     redis_url: str = "redis://localhost:6379/0"
-    celery_broker_url: str = "redis://localhost:6379/1"
-    celery_result_backend: str = "redis://localhost:6379/2"
 
     llm_api_key: str = ""
     llm_base_url: str = "https://api.openai.com/v1"

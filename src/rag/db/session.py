@@ -24,12 +24,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 @asynccontextmanager
 async def worker_session() -> AsyncGenerator[AsyncSession, None]:
-    """Session bound to the current event loop.
+    """Session with a NullPool engine scoped to the caller.
 
-    Celery calls asyncio.run() per task, which closes the loop. A pooled
-    engine from a previous loop raises "Future attached to a different loop".
-    Indexing (bulk_index / ensure_index / delete_by_doc_id) must use this
-    session when running in a worker, not the process-global AsyncSessionLocal.
+    Useful for one-off scripts that need an isolated async engine.
     """
     task_engine = create_async_engine(
         settings.database_url,

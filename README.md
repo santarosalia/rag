@@ -2,7 +2,7 @@
 
 **Dense + Sparse 하이브리드 검색**, **Cross-encoder Rerank**, **출처 기반 LLM 답변**을 제공하는 프로덕션급 RAG 플랫폼입니다.
 
-PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery 비동기 인제스트, Kubernetes 배포를 지원합니다.
+PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, TEI 임베딩·리랭크, Kubernetes 배포를 지원합니다.
 
 ---
 
@@ -16,7 +16,7 @@ PostgreSQL **pgvector**(Dense) + **FTS + Kiwi**(Sparse) 단일 DB 검색, Celery
 | **Citation** | chunk_id, filename, page. `/v1/query`·`/v1/retrieve` body `snippet`/`content`(bool). 기본 snippet만 |
 | **Tables** | HTML→MD, 원본+`table_row`, 검색 후 `parent_chunk_id`로 표 expand |
 | **Groups** | 평면 문서 그룹. 생성 시 외부 문자열 ID 지정 가능 |
-| **Async Ingest** | `POST /v1/documents` → Parser Service → `parse_json` → results 단위 chunk/embed |
+| **Sync Ingest** | `POST /v1/documents`(ParseResponse) · `POST /v1/documents/files`(원본→Parser) → 동기 chunk/embed |
 | **Single DB** | 메타데이터 + ParseResponse + 벡터 + FTS + 용어집 모두 PostgreSQL |
 | **Observability** | Prometheus, structlog (`ensure_ascii=False`), OpenTelemetry |
 
@@ -33,11 +33,9 @@ Query → Dense kNN ∥ FTS(glossary OR + Kiwi) → RRF → Rerank → table exp
 | Component | Technology |
 |-----------|------------|
 | API | FastAPI + Uvicorn |
-| Queue | Celery + Redis |
 | Search | PostgreSQL pgvector + FTS (Kiwi) |
 | Document store | PostgreSQL JSONB (`documents.parse_json`) |
-| Embedding | BAAI/bge-m3 |
-| Reranker | BAAI/bge-reranker-v2-m3 |
+| Embedding / Rerank | TEI (`BAAI/bge-m3`, `bge-reranker-v2-m3`) |
 | LLM | OpenAI-compatible API |
 
 > [`doc/RAG_PLANNING.md`](doc/RAG_PLANNING.md) · [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) · [`doc/GROUP_PLANNING.md`](doc/GROUP_PLANNING.md) · [`doc/adr/`](doc/adr/) · [`doc/PARSE_BOUNDARY.md`](doc/PARSE_BOUNDARY.md) · [`doc/CHUNKING.md`](doc/CHUNKING.md) · [`doc/KIWI.md`](doc/KIWI.md) · [`doc/DOCUOPS_RAG_STRATEGY.md`](doc/DOCUOPS_RAG_STRATEGY.md)
@@ -61,14 +59,14 @@ curl -X POST http://localhost:8000/v1/groups \
   -H "Content-Type: application/json" \
   -d '{"id": "ga"}'
 
-# 원본 업로드 (Parser Service → ParseResponse → 적재)
+# ParseResponse / ResultItem[] JSON (파서 스킵, 동기 ingest)
 curl -X POST http://localhost:8000/v1/documents \
-  -F "file=@document.pdf" \
-  -F "group_id=ga"
+  -H "Content-Type: application/json" \
+  -d '{"group_id":"ga","filename":"document.json","parse":{"status":"SUCCESS","results":[]}}'
 
-# ParseResponse / ResultItem[] JSON (파서 스킵)
-curl -X POST http://localhost:8000/v1/documents/parse/file \
-  -F "file=@document.json" \
+# 원본 업로드 (Parser Service → 동기 ingest)
+curl -X POST http://localhost:8000/v1/documents/files \
+  -F "file=@document.pdf" \
   -F "group_id=ga"
 
 # 검색 (group_id 생략 시 전체)
@@ -93,8 +91,8 @@ curl -X POST http://localhost:8000/v1/query \
 | `GET /v1/groups/{id}` | 단건 |
 | `DELETE /v1/groups/{id}` | 빈 그룹만 삭제 |
 | `GET /v1/groups/{id}/documents` | 소속 문서 |
-| `POST /v1/documents` | 원본 파일 → Parser Service → parse_json 적재 (`parse` 필드에 ParseResponse) |
-| `POST /v1/documents/parse/file` | ParseResponse JSON 또는 ResultItem[] 직적재 |
+| `POST /v1/documents` | ParseResponse JSON / ResultItem[] 동기 적재 |
+| `POST /v1/documents/files` | 원본 파일 → Parser Service → 동기 적재 |
 | `GET /v1/documents/{id}` | 인덱싱 상태 (`group_id`) |
 | `POST /v1/retrieve` | hybrid/dense/sparse 검색 |
 | `POST /v1/query` | 검색 + LLM. `include_glossary_definitions`(기본 false) |

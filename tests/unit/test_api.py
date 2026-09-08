@@ -28,11 +28,22 @@ async def test_health_endpoint(app):
 
 
 @pytest.mark.asyncio
-async def test_upload_requires_group_id(app):
+async def test_documents_parse_requires_group_id(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/v1/documents",
+            json={"filename": "a.json", "parse": [{"id": "1", "type": "text", "markdown": "hi"}]},
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_documents_files_requires_group_id(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/documents/files",
             files={"file": ("a.txt", b"hello", "text/plain")},
         )
         assert response.status_code == 400
@@ -40,39 +51,12 @@ async def test_upload_requires_group_id(app):
 
 
 @pytest.mark.asyncio
-async def test_parse_file_requires_group_id(app):
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        payload = b'[{"id":"1","type":"text","markdown":"hi","prov":[]}]'
-        response = await client.post(
-            "/v1/documents/parse/file",
-            files={"file": ("note.json", payload, "application/json")},
-        )
-        assert response.status_code == 400
-        assert "group_id" in response.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_parse_file_rejects_empty(app):
+async def test_documents_rejects_invalid_parse_json(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/v1/documents/parse/file",
-            data={"group_id": "ga"},
-            files={"file": ("note.json", b"   ", "application/json")},
-        )
-        assert response.status_code == 400
-        assert "Empty" in response.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_parse_file_rejects_invalid_json(app):
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/v1/documents/parse/file",
-            data={"group_id": "ga"},
-            files={"file": ("note.json", b"not-json", "application/json")},
+            "/v1/documents",
+            json={"group_id": "ga", "filename": "note.json", "parse": "not-an-object"},
         )
         assert response.status_code == 400
         assert "Invalid parse JSON" in response.json()["detail"]

@@ -3,7 +3,6 @@
 #   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 #
 # API: uvicorn --reload
-# Worker: watchfiles 가 src 변경 시 Celery 를 재시작
 
 services:
   api:
@@ -21,19 +20,3 @@ services:
       --reload
       --reload-dir /app/src
       --reload-dir /app/configs
-
-  worker:
-    volumes:
-      - ./src:/app/src
-      - ./configs:/app/configs
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
-      - ./scripts:/app/scripts
-      - ./ad_glossary_v1.0_20260828.csv:/app/ad_glossary_v1.0_20260828.csv:ro
-    command:
-      - watchfiles
-      - --filter
-      - python
-      - celery -A rag.workers.celery_app worker --loglevel=info --concurrency=2
-      - /app/src
-      - /app/configs

@@ -19,31 +19,29 @@ flowchart TB
   end
 
   subgraph ingest [Ingestion]
-    Upload[ParseResponse Upload]
+    Upload[ParseResponse or File]
     Chunker[results_to_chunks]
-    EmbedWorker[Embedding BGE-M3]
+    EmbedWorker[TEI Embedding]
     MorphWorker[Kiwi Morphology]
-    CeleryWorker[Celery Worker]
   end
 
   subgraph storage [Storage]
     PG[(PostgreSQL parse_json + pgvector + FTS + glossary)]
-    Redis[(Redis)]
+    Redis[(Redis embed cache)]
   end
 
   subgraph query [Query Pipeline]
     Dense[Dense kNN top-50]
     Sparse[FTS ts_rank + glossary OR]
     RRF[RRF Fusion k=60]
-    Rerank[Cross-encoder top-5]
+    Rerank[TEI Rerank top-5]
     Expand[table_row parent expand]
     LLM[LLM Generate]
   end
 
   App --> Auth --> RateLimit --> FastAPI
   FastAPI --> Upload
-  Upload --> CeleryWorker
-  CeleryWorker --> Chunker --> EmbedWorker
+  Upload --> Chunker --> EmbedWorker
   EmbedWorker --> MorphWorker --> PG
 
   FastAPI --> Dense
@@ -61,12 +59,11 @@ flowchart TB
 
 ### 인덱싱
 
-1. Client → `POST /v1/documents` (multipart + **필수** `group_id`) 또는 `POST /v1/documents/parse/file`
-2. (원본 경로) API → Parser Service → `documents.parse_json` 저장 (pending)
-3. Celery `ingest_document` enqueue
-4. Worker → `results[]` → [`CHUNKING.md`](CHUNKING.md) (표: 원본 + `table_row`, `parent_chunk_id`)
-5. 전 청크 INSERT; **searchable**만 BGE-M3 embed + Kiwi → `embedding` / `content_morph` / `tsv`
-6. status completed, `chunk_count` 갱신
+1. Client → `POST /v1/documents` (ParseResponse JSON) 또는 `POST /v1/documents/files` (원본 + **필수** `group_id`)
+2. (파일 경로) API → Parser Service → `documents.parse_json`
+3. 같은 요청에서 동기 ingest: `results[]` → [`CHUNKING.md`](CHUNKING.md)
+4. 전 청크 INSERT; **searchable**만 TEI embed + Kiwi → `embedding` / `content_morph` / `tsv`
+5. status completed, `chunk_count` 갱신
 
 문서 원문은 **S3 없음** — `parse_json` JSONB만.
 
@@ -116,10 +113,9 @@ src/rag/
 ├── glossary/      # store, expand, csv_io, service
 ├── groups/        # 평면 group_id 필터·CRUD
 ├── ingestion/     # parse_items, table_markdown, pipeline, TextChunk
-├── retrieval/     # hybrid pipeline, table_expand, embeddings
+├── retrieval/     # hybrid pipeline, table_expand, embeddings (TEI)
 ├── generation/    # LLM + QueryService
 ├── indexing/      # pgvector_backend (knn/fts_search), morphology
-├── workers/       # Celery
 ├── db/            # models (Group, Document, Chunk, GlossaryTerm, …)
 └── observability/
 ```
@@ -128,9 +124,9 @@ src/rag/
 
 ```mermaid
 flowchart LR
-  A[POST /v1/documents] --> Ext[Parser Service]
+  A[POST /v1/documents/files] --> Ext[Parser Service]
   Ext -->|ParseResponse| Chunk
-  B[POST /v1/documents/parse/file] -->|JSON| Chunk
+  B[POST /v1/documents] -->|JSON| Chunk
   Chunk[results chunk + Embed + Kiwi] --> PG[(PostgreSQL)]
   Q[retrieve / query] --> PG
 ```

@@ -11,11 +11,13 @@ from rag.db.models import DocumentStatus as DBDocumentStatus
 from rag.db.session import get_db
 from rag.generation.service import QueryService
 from rag.groups.service import require_group, resolve_search_group
+from rag.indexing.factory import get_search_backend
 from rag.ingestion.parse_items import load_parse_response
 from rag.ingestion.parser_client import ParserClient, ParserError
-from rag.ingestion.pipeline import create_document_record
+from rag.ingestion.pipeline import IngestionPipeline, create_document_record
 from rag.models.parse import ParseResponse
 from rag.models.schemas import (
+    DocumentIngestRequest,
     DocumentResponse,
     DocumentStatus,
     DocumentUploadResponse,
@@ -28,33 +30,12 @@ from rag.models.schemas import (
 from rag.observability.metrics import QUERY_COUNTER
 from rag.retrieval.pipeline import RetrievalPipeline
 
-
-def _enqueue_ingest(doc_id: str, job_id: str):
-    from rag.workers.celery_app import ingest_document_task
-
-    return ingest_document_task.delay(doc_id, job_id)
-
-
-def _enqueue_delete(doc_id: str):
-    from rag.workers.celery_app import delete_document_task
-
-    return delete_document_task.delay(doc_id)
-
-
 router = APIRouter(prefix="/v1")
 router.include_router(groups_router)
 router.include_router(glossary_router)
 
 
-async def _enqueue_parse(
-    db: AsyncSession,
-    *,
-    group_id: str,
-    filename: str,
-    content_type: str,
-    parse: ParseResponse,
-) -> DocumentUploadResponse:
-    await require_group(db, group_id)
+def _validate_parse(parse: ParseResponse) -> None:
     if parse.status.upper() == "FAIL":
         raise HTTPException(
             status_code=502,
@@ -63,31 +44,68 @@ async def _enqueue_parse(
     if not parse.results:
         raise HTTPException(status_code=400, detail="Parse response has no results")
 
-    document, job = await create_document_record(
+
+async def _ingest_parse(
+    db: AsyncSession,
+    *,
+    group_id: str,
+    filename: str,
+    content_type: str,
+    parse: ParseResponse,
+) -> DocumentUploadResponse:
+    await require_group(db, group_id)
+    _validate_parse(parse)
+
+    document = await create_document_record(
         db,
         filename=filename,
         content_type=content_type,
         parse=parse,
         group_id=group_id,
     )
-    task = _enqueue_ingest(str(document.id), str(job.id))
-    job.celery_task_id = task.id
-    await db.flush()
+    pipeline = IngestionPipeline()
+    try:
+        await pipeline.ingest_document(db, document.id)
+    finally:
+        await pipeline.search_backend.close()
+
+    await db.refresh(document)
     return DocumentUploadResponse(
         doc_id=document.id,
-        job_id=job.id,
-        status=DocumentStatus.PENDING,
+        status=DocumentStatus(document.status.value),
+        chunk_count=document.chunk_count,
+        message="Document ingested",
         parse=parse,
     )
 
 
 @router.post("/documents", response_model=DocumentUploadResponse)
-async def upload_document(
+async def ingest_parse_document(
+    request: DocumentIngestRequest,
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUploadResponse:
+    """Ingest a Parser Service ParseResponse (or ResultItem[]) — no parse call."""
+    try:
+        parse = load_parse_response(request.parse)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid parse JSON: {exc}") from exc
+
+    return await _ingest_parse(
+        db,
+        group_id=request.group_id,
+        filename=request.filename.strip(),
+        content_type=request.content_type,
+        parse=parse,
+    )
+
+
+@router.post("/documents/files", response_model=DocumentUploadResponse)
+async def upload_document_file(
     file: UploadFile = File(...),
     group_id: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
-    """Upload a source file, parse via Parser Service, then queue ParseResponse ingest."""
+    """Upload a source file, parse via Parser Service, then ingest synchronously."""
     if not group_id or not group_id.strip():
         raise HTTPException(status_code=400, detail="group_id is required")
     citation_name = (file.filename or "").strip()
@@ -107,42 +125,11 @@ async def upload_document(
     except ParserError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    return await _enqueue_parse(
+    return await _ingest_parse(
         db,
         group_id=group_id.strip(),
         filename=citation_name,
         content_type=file.content_type or "application/octet-stream",
-        parse=parse,
-    )
-
-
-@router.post("/documents/parse/file", response_model=DocumentUploadResponse)
-async def upload_parse_file(
-    file: UploadFile = File(...),
-    group_id: str | None = Form(default=None),
-    db: AsyncSession = Depends(get_db),
-) -> DocumentUploadResponse:
-    """Upload ParseResponse JSON or ResultItem[] and queue ingest (no Parser Service)."""
-    if not group_id or not group_id.strip():
-        raise HTTPException(status_code=400, detail="group_id is required")
-    citation_name = (file.filename or "").strip()
-    if not citation_name:
-        raise HTTPException(status_code=400, detail="Filename is required")
-
-    raw = await file.read()
-    if not raw or not raw.strip():
-        raise HTTPException(status_code=400, detail="Empty file")
-
-    try:
-        parse = load_parse_response(raw)
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid parse JSON: {exc}") from exc
-
-    return await _enqueue_parse(
-        db,
-        group_id=group_id.strip(),
-        filename=citation_name,
-        content_type=file.content_type or "application/json",
         parse=parse,
     )
 
@@ -183,8 +170,18 @@ async def delete_document(
     if document.status == DBDocumentStatus.DELETED:
         return {"doc_id": str(doc_id), "status": "already_deleted"}
 
-    task = _enqueue_delete(str(doc_id))
-    return {"doc_id": str(doc_id), "status": "deletion_queued", "task_id": task.id}
+    from datetime import UTC, datetime
+
+    backend = get_search_backend()
+    try:
+        await backend.delete_by_doc_id(str(doc_id), db)
+    finally:
+        await backend.close()
+
+    document.status = DBDocumentStatus.DELETED
+    document.deleted_at = datetime.now(UTC)
+    await db.flush()
+    return {"doc_id": str(doc_id), "status": "deleted"}
 
 
 @router.post("/retrieve", response_model=RetrieveResponse)

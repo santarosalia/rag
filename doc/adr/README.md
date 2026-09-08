@@ -21,7 +21,7 @@
 | [0002](0002-remove-opensearch-single-db-stack.md) | OpenSearch 제거, 단일 DB 스택 | Accepted |
 | [0003](0003-bge-m3-and-bge-reranker-models.md) | BGE-M3 + bge-reranker-v2-m3 모델 선택 | Accepted |
 | [0004](0004-rrf-hybrid-fusion.md) | RRF로 Dense/Sparse 결과 융합 | Accepted |
-| [0005](0005-celery-redis-async-ingestion.md) | Celery + Redis 비동기 인제스트 | Accepted |
+| [0005](0005-celery-redis-async-ingestion.md) | Celery + Redis 비동기 인제스트 | Superseded (sync) |
 | [0006](0006-openai-compatible-llm-api.md) | OpenAI-compatible LLM API | Accepted |
 | [0007](0007-groups-tree-replaces-tenant-id.md) | tenant_id를 그룹 트리로 교체 | Superseded by 0009 |
 | [0008](0008-parse-boundary-dual-ingest-entry.md) | 파싱 경계 (Markdown-only로 supersede) | Superseded |

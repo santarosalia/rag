@@ -28,11 +28,20 @@ class SearchMode(StrEnum):
     SPARSE = "sparse"
 
 
+class DocumentIngestRequest(BaseModel):
+    """ParseResponse (or ResultItem[]) body for sync ingest without Parser Service."""
+
+    group_id: GroupId
+    filename: str = Field(..., min_length=1, max_length=512)
+    content_type: str = "application/json"
+    parse: Any
+
+
 class DocumentUploadResponse(BaseModel):
     doc_id: UUID
-    job_id: UUID
     status: DocumentStatus
-    message: str = "Document queued for ingestion"
+    chunk_count: int = 0
+    message: str = "Document ingested"
     parse: ParseResponse | None = None
 
 

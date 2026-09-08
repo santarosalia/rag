@@ -27,9 +27,9 @@ type: Opaque
 stringData:
   DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/rag
   REDIS_URL: redis://redis:6379/0
-  CELERY_BROKER_URL: redis://redis:6379/1
-  CELERY_RESULT_BACKEND: redis://redis:6379/2
   LLM_API_KEY: ""
+  TEI_EMBEDDING_URL: http://tei-embed:80
+  TEI_RERANKER_URL: http://tei-rerank:80
 
 ---
 apiVersion: apps/v1
@@ -110,39 +110,6 @@ spec:
         target:
           type: Utilization
           averageUtilization: 70
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: rag-worker
-  namespace: rag
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: rag-worker
-  template:
-    metadata:
-      labels:
-        app: rag-worker
-    spec:
-      containers:
-        - name: worker
-          image: rag:latest
-          command: ["celery", "-A", "rag.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
-          envFrom:
-            - configMapRef:
-                name: rag-config
-            - secretRef:
-                name: rag-secrets
-          resources:
-            requests:
-              memory: "2Gi"
-              cpu: "1"
-            limits:
-              memory: "8Gi"
-              cpu: "4"
 
 ---
 apiVersion: apps/v1

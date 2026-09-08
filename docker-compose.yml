@@ -7,8 +7,6 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/rag
       REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
       TEI_EMBEDDING_URL: http://tei-embed:80
       TEI_RERANKER_URL: http://tei-rerank:80
     depends_on:
@@ -21,27 +19,6 @@ services:
       tei-rerank:
         condition: service_healthy
     command: uvicorn rag.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-  worker:
-    build: .
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/rag
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      TEI_EMBEDDING_URL: http://tei-embed:80
-      TEI_RERANKER_URL: http://tei-rerank:80
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      tei-embed:
-        condition: service_healthy
-      tei-rerank:
-        condition: service_healthy
-    command: celery -A rag.workers.celery_app worker --loglevel=info --concurrency=2
 
   tei-embed:
     # RTX 4090 (sm_89). Other GPUs: 86-*, 80-*, or cuda-* tags.

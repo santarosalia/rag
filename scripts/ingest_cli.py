@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""CLI for ingesting documents (source via /documents, or ParseResponse JSON via /parse/file)."""
+"""CLI for ingesting documents (files via /documents/files, or ParseResponse JSON via /documents)."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -18,7 +19,7 @@ def main() -> None:
     parser.add_argument(
         "--parse-json",
         action="store_true",
-        help="Skip parser; POST /v1/documents/parse/file for .json ParseResponse or ResultItem[]",
+        help="Skip parser; POST /v1/documents with ParseResponse or ResultItem[] JSON",
     )
     args = parser.parse_args()
 
@@ -36,21 +37,31 @@ def main() -> None:
         sys.exit(1)
 
     client = httpx.Client(base_url=args.api_url, timeout=600.0)
-    endpoint = "/v1/documents/parse/file" if args.parse_json else "/v1/documents"
 
     for file_path in files:
-        with file_path.open("rb") as f:
+        if args.parse_json:
+            payload = json.loads(file_path.read_text(encoding="utf-8-sig"))
             response = client.post(
-                endpoint,
-                files={"file": (file_path.name, f)},
-                data={"group_id": args.group_id},
+                "/v1/documents",
+                json={
+                    "group_id": args.group_id,
+                    "filename": file_path.name,
+                    "parse": payload,
+                },
             )
-            response.raise_for_status()
-            result = response.json()
-            print(
-                f"Uploaded {file_path.name} -> doc_id={result['doc_id']}, "
-                f"job_id={result['job_id']}"
-            )
+        else:
+            with file_path.open("rb") as f:
+                response = client.post(
+                    "/v1/documents/files",
+                    files={"file": (file_path.name, f)},
+                    data={"group_id": args.group_id},
+                )
+        response.raise_for_status()
+        result = response.json()
+        print(
+            f"Uploaded {file_path.name} -> doc_id={result['doc_id']}, "
+            f"status={result['status']}, chunks={result.get('chunk_count')}"
+        )
 
 
 if __name__ == "__main__":

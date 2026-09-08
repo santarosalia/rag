@@ -6,7 +6,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag.config import get_settings
-from rag.db.models import Chunk, Document, DocumentStatus, Group, IngestJob, JobStatus
+from rag.db.models import Chunk, Document, DocumentStatus, Group
 from rag.indexing.documents import build_index_document
 from rag.indexing.factory import get_search_backend
 from rag.ingestion.parse_items import load_parse_response, parse_response_to_chunks
@@ -142,8 +142,10 @@ class IngestionPipeline:
         except Exception as e:
             document.status = DocumentStatus.FAILED
             document.error_message = str(e)
+            document.updated_at = datetime.now(UTC)
             INGEST_COUNTER.labels(status="failed").inc()
             logger.error("document_ingest_failed", doc_id=str(doc_id), error=str(e))
+            await session.commit()
             raise
 
 
@@ -154,7 +156,7 @@ async def create_document_record(
     content_type: str,
     parse: ParseResponse | dict[str, Any],
     group_id: str,
-) -> tuple[Document, IngestJob]:
+) -> Document:
     if isinstance(parse, ParseResponse):
         parse_json = parse.model_dump(mode="json")
     else:
@@ -169,13 +171,4 @@ async def create_document_record(
     )
     session.add(document)
     await session.flush()
-
-    job = IngestJob(
-        doc_id=document.id,
-        idempotency_key=str(document.id),
-        status=JobStatus.PENDING,
-    )
-    session.add(job)
-    await session.flush()
-
-    return document, job
+    return document

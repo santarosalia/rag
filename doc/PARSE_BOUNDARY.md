@@ -2,29 +2,32 @@
 
 > **목적:** 이 저장소는 **적재(chunk → embed → Kiwi → PostgreSQL)와 검색·생성**을 담당한다.  
 > 원본 파싱은 외부 **Parser Service** (`PARSE_API_BASE_URL`)에 위임한다.  
-> 문서 본문은 S3에 두지 않고 `documents.parse_json`(JSONB)에 저장한다.
+> 문서 본문은 S3에 두지 않고 `documents.parse_json`(JSONB)에 저장한다.  
+> Ingest는 **동기**(요청이 끝날 때까지 chunk/embed/index).
 
 ---
 
 ## 1. 결론
 
 ```
-원본 PDF/Office
+원본 PDF/Office                    이미 있는 ParseResponse
+    │                                      │
+    ▼                                      ▼
+POST /v1/documents/files              POST /v1/documents
+    │                                      │
+    ▼ Parser Service                       │
+ParseResponse ─────────────────────────────┘
     │
-    ▼
-POST /v1/documents  ──►  Parser Service POST /parse (서비스 기본 output_format)
-    │                         │
-    │                         ▼ ParseResponse
-    ▼
-documents.parse_json → results[] 단위 청킹 → BGE-M3 → Kiwi → PostgreSQL
+    ▼ 동기 ingest
+documents.parse_json → results[] 청킹 → TEI embed → Kiwi → PostgreSQL
 ```
 
 | API | 동작 |
 |-----|------|
-| `POST /v1/documents` | 원본 → Parser Service → `parse_json` 적재. 응답에 `parse: ParseResponse` |
-| `POST /v1/documents/parse/file` | ParseResponse JSON 또는 `ResultItem[]` 직적재 (파서 스킵) |
+| `POST /v1/documents` | ParseResponse JSON 또는 `ResultItem[]` 직적재 (파서 스킵) |
+| `POST /v1/documents/files` | 원본 파일 → Parser Service → 동기 ingest. 응답에 `parse` |
 
-`group_id` 필수. Markdown 직적재·S3 문서 저장은 없다.
+`group_id` 필수. Celery / `ingest_jobs` 없음.
 
 ---
 
@@ -42,6 +45,16 @@ documents.parse_json → results[] 단위 청킹 → BGE-M3 → Kiwi → Postgre
 | `rendered_document` | string? | 전체 Markdown (청킹에는 사용하지 않음) |
 
 청킹은 **`results[]`만** 사용한다. 상세: [`CHUNKING.md`](CHUNKING.md).
+
+`POST /v1/documents` body 예:
+
+```json
+{
+  "group_id": "br",
+  "filename": "manual.pdf",
+  "parse": { "status": "SUCCESS", "results": [ ... ] }
+}
+```
 
 ---
 
