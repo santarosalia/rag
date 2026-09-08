@@ -105,7 +105,7 @@ curl -X POST http://localhost:8000/v1/query \
 ## 설정
 
 [`configs/default.yaml`](configs/default.yaml) — chunk size, top_k, RRF k 등  
-[`.env.example`](.env.example) — DB, Redis, LLM, 모델
+[`.env.example`](.env.example) — DB, LLM, 모델, TEI, Parser
 
 ---
 

@@ -6,12 +6,7 @@ from rag.indexing.factory import get_search_backend
 from rag.models.schemas import Citation, SearchMode
 from rag.observability.logging import get_logger
 from rag.observability.metrics import RETRIEVAL_LATENCY
-from rag.retrieval.embeddings import (
-    QueryEmbeddingCache,
-    get_embedding_cache,
-    get_embedding_service,
-    get_reranker_service,
-)
+from rag.retrieval.embeddings import get_embedding_service, get_reranker_service
 from rag.retrieval.fusion import rrf_fuse
 from rag.retrieval.table_expand import expand_hits_with_parent_tables
 
@@ -19,14 +14,10 @@ logger = get_logger(__name__)
 
 
 class RetrievalPipeline:
-    def __init__(
-        self,
-        embedding_cache: QueryEmbeddingCache | None = None,
-    ) -> None:
+    def __init__(self) -> None:
         self.search_backend = get_search_backend()
         self.embedding_service = get_embedding_service()
         self.reranker_service = get_reranker_service()
-        self.embedding_cache = embedding_cache or get_embedding_cache()
         self.config = get_settings().yaml_config.get("retrieval", {})
 
     @property
@@ -107,13 +98,7 @@ class RetrievalPipeline:
         return citations, latency
 
     async def _get_query_embedding(self, query: str) -> list[float]:
-        cached = await self.embedding_cache.get(query, self.embedding_service.model_name)
-        if cached:
-            return cached
-
-        embedding = self.embedding_service.embed_query(query)
-        await self.embedding_cache.set(query, self.embedding_service.model_name, embedding)
-        return embedding
+        return self.embedding_service.embed_query(query)
 
     @staticmethod
     def _to_citations(hits: list[dict[str, Any]]) -> list[Citation]:

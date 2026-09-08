@@ -1,14 +1,12 @@
 from contextlib import asynccontextmanager
 from typing import Any
 
-import redis.asyncio as aioredis
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_client import make_asgi_app
 from sqlalchemy import text
 
 from rag import __version__
-from rag.api.middleware import RateLimitMiddleware
 from rag.api.routes import router
 from rag.config import get_settings
 from rag.db.session import engine
@@ -56,7 +54,6 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    rate_limit = settings.yaml_config.get("rate_limit", {}).get("requests_per_minute", 60)
 
     app = FastAPI(
         title="Hybrid RAG API",
@@ -65,7 +62,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=rate_limit)
     app.include_router(router)
     FastAPIInstrumentor.instrument_app(app)
 
@@ -88,14 +84,6 @@ def create_app() -> FastAPI:
             checks["postgres"] = f"error: {e}"
 
         try:
-            redis = aioredis.from_url(settings.redis_url)
-            await redis.ping()
-            await redis.aclose()
-            checks["redis"] = "ok"
-        except Exception as e:
-            checks["redis"] = f"error: {e}"
-
-        try:
             search_backend = get_search_backend()
             ok = await search_backend.ping()
             await search_backend.close()
@@ -103,7 +91,7 @@ def create_app() -> FastAPI:
         except Exception as e:
             checks["search_pgvector"] = f"error: {e}"
 
-        required = {"postgres", "redis", "search_pgvector"}
+        required = {"postgres", "search_pgvector"}
         all_ok = all(checks.get(k) == "ok" for k in required)
         return ReadyResponse(
             status="ready" if all_ok else "not_ready",

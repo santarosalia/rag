@@ -31,15 +31,9 @@ llm:
     If the context does not contain enough information, say so clearly.
     Answer in the same language as the question.
 
-cache:
-  query_embedding_ttl_seconds: 3600
-
 ingestion:
   bulk_batch_size: 100
   max_retries: 3
-
-rate_limit:
-  requests_per_minute: 60
 
 search:
   sparse_analyzer: kiwi  # Kiwi morphological analyzer for Korean FTS

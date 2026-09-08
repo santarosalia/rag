@@ -6,14 +6,11 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/rag
-      REDIS_URL: redis://redis:6379/0
       TEI_EMBEDDING_URL: http://tei-embed:80
       TEI_RERANKER_URL: http://tei-rerank:80
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
       tei-embed:
         condition: service_healthy
       tei-rerank:
@@ -100,14 +97,6 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
 volumes:
   postgres_data:
-  redis_data:
   tei_data:

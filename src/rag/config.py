@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
-    redis_url: str = "redis://localhost:6379/0"
 
     llm_api_key: str = ""
     llm_base_url: str = "https://api.openai.com/v1"

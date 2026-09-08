@@ -1,9 +1,6 @@
-import hashlib
-import json
 from functools import lru_cache
 
 import httpx
-import redis.asyncio as aioredis
 
 from rag.config import get_settings
 from rag.observability.logging import get_logger
@@ -157,43 +154,6 @@ class RerankerService:
         return scored[:top_n]
 
 
-class QueryEmbeddingCache:
-    def __init__(self) -> None:
-        settings = get_settings()
-        self.redis_url = settings.redis_url
-        self.ttl = settings.yaml_config.get("cache", {}).get("query_embedding_ttl_seconds", 3600)
-        self._redis: aioredis.Redis | None = None
-
-    async def _get_redis(self) -> aioredis.Redis:
-        if self._redis is None:
-            self._redis = aioredis.from_url(self.redis_url, decode_responses=True)
-        return self._redis
-
-    @staticmethod
-    def _cache_key(query: str, model_name: str) -> str:
-        digest = hashlib.sha256(f"{model_name}:{query}".encode()).hexdigest()
-        return f"emb:{digest}"
-
-    async def get(self, query: str, model_name: str) -> list[float] | None:
-        try:
-            redis = await self._get_redis()
-            key = self._cache_key(query, model_name)
-            cached = await redis.get(key)
-            if cached:
-                return json.loads(cached)
-        except Exception as e:
-            logger.warning("embedding_cache_get_failed", error=str(e))
-        return None
-
-    async def set(self, query: str, model_name: str, embedding: list[float]) -> None:
-        try:
-            redis = await self._get_redis()
-            key = self._cache_key(query, model_name)
-            await redis.setex(key, self.ttl, json.dumps(embedding))
-        except Exception as e:
-            logger.warning("embedding_cache_set_failed", error=str(e))
-
-
 @lru_cache
 def get_embedding_service() -> EmbeddingService:
     return EmbeddingService()
@@ -202,8 +162,3 @@ def get_embedding_service() -> EmbeddingService:
 @lru_cache
 def get_reranker_service() -> RerankerService:
     return RerankerService()
-
-
-@lru_cache
-def get_embedding_cache() -> QueryEmbeddingCache:
-    return QueryEmbeddingCache()

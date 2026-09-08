@@ -21,7 +21,7 @@ RAG 검색 품질은 **Embedding(bi-encoder)** 과 **Reranker(cross-encoder)** �
 | Reranker | `BAAI/bge-reranker-v2-m3` | — |
 
 - `sentence-transformers` / `CrossEncoder`로 CPU inference (GPU optional)
-- Query embedding Redis cache (TTL 1h)
+- TEI 배포 시 HTTP embed/rerank (인프로세스 fallback 유지)
 
 ## 대안
 

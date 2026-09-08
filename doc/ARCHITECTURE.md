@@ -15,7 +15,6 @@ flowchart TB
   subgraph api_layer [API Layer]
     FastAPI[FastAPI rag-api]
     Auth[API Key Middleware]
-    RateLimit[Rate Limit Redis]
   end
 
   subgraph ingest [Ingestion]
@@ -27,7 +26,6 @@ flowchart TB
 
   subgraph storage [Storage]
     PG[(PostgreSQL parse_json + pgvector + FTS + glossary)]
-    Redis[(Redis embed cache)]
   end
 
   subgraph query [Query Pipeline]
@@ -39,7 +37,7 @@ flowchart TB
     LLM[LLM Generate]
   end
 
-  App --> Auth --> RateLimit --> FastAPI
+  App --> Auth --> FastAPI
   FastAPI --> Upload
   Upload --> Chunker --> EmbedWorker
   EmbedWorker --> MorphWorker --> PG
@@ -52,7 +50,6 @@ flowchart TB
   Sparse --> RRF
   RRF --> Rerank --> Expand --> LLM
   Expand --> PG
-  Dense --> Redis
 ```
 
 ## 데이터 흐름
@@ -70,7 +67,7 @@ flowchart TB
 ### 질의
 
 1. `POST /v1/query` 또는 `/v1/retrieve`
-2. Dense: 원문 쿼리 → BGE-M3 (Redis embedding cache)
+2. Dense: 원문 쿼리 → BGE-M3
 3. Sparse: 원문 longest-match 용어집 OR 확장 → Kiwi → `to_tsquery` + `ts_rank` (`fts_search`)
 4. RRF → rerank top-5
 5. `table_row` → `parent_chunk_id`로 부모 표 expand · 부모 dedupe
@@ -109,7 +106,7 @@ searchable=false(원본 표)는 embedding/`tsv` NULL. soft-delete 시 embedding/
 
 ```
 src/rag/
-├── api/           # routes, groups, glossary, middleware
+├── api/           # routes, groups, glossary
 ├── glossary/      # store, expand, csv_io, service
 ├── groups/        # 평면 group_id 필터·CRUD
 ├── ingestion/     # parse_items, table_markdown, pipeline, TextChunk
