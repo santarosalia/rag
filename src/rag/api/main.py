@@ -53,8 +53,6 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    settings = get_settings()
-
     app = FastAPI(
         title="Hybrid RAG API",
         description="Production-grade RAG with pgvector + FTS hybrid search",
